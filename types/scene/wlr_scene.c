@@ -981,9 +981,11 @@ struct wlr_scene_output *wlr_scene_get_scene_output(struct wlr_scene *scene,
 
 void wlr_scene_output_set_position(struct wlr_scene_output *scene_output,
 		int lx, int ly) {
+/* This is called when the output is reconfigured with a different scale but
+ * with the same size. The conditional below would stop
 	if (scene_output->x == lx && scene_output->y == ly) {
 		return;
-	}
+	}*/
 
 	scene_output->x = lx;
 	scene_output->y = ly;
