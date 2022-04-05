@@ -8,6 +8,7 @@
 #include <wlr/types/wlr_output_damage.h>
 #include <wlr/types/wlr_presentation_time.h>
 #include <wlr/types/wlr_scene.h>
+#include <wlr/types/wlr_fractional_scale_v1.h>
 #include <wlr/util/log.h>
 #include <wlr/util/region.h>
 #include "util/signal.h"
@@ -207,6 +208,11 @@ static void scene_surface_update_outputs(
 		} else {
 			wlr_surface_send_leave(scene_surface->surface, scene_output->output);
 		}
+	}
+
+	if (scene_surface->primary_output != NULL) {
+		wlr_fractional_scale_v1_notify_scale(scene_surface->surface,
+			scene_surface->primary_output->scale);
 	}
 }
 
