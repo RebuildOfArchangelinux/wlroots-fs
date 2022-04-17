@@ -793,14 +793,36 @@ static void render_node_iterator(struct wlr_scene_node *node,
 	struct wlr_output *output = data->output;
 	pixman_region32_t *output_damage = data->damage;
 
+	if (node->type == WLR_SCENE_NODE_ROOT ||
+			node->type == WLR_SCENE_NODE_TREE) {
+		return;
+	}
+
 	struct wlr_box dst_box = {
-		.x = x,
-		.y = y,
+		.x = node->state.x,
+		.y = node->state.y,
 	};
+
+	// Add wlr_scene_surface withing wlr_scene_subsurface_tree position
+	// (basically wl_subsurface position)
+	// surface@0,0 <- tree@x,y <- surface parent
+	struct wlr_scene_node *iter = node->parent;
+	dst_box.x += iter->state.x;
+	dst_box.y += iter->state.y;
+	iter = iter->parent;
+
 	scene_node_get_size(node, &dst_box.width, &dst_box.height);
 	scale_box(&dst_box, output->scale);
 
+	// Add stably rounded scaled parent position
+	while (iter != NULL) {
+		dst_box.x += round(iter->state.x * output->scale);
+		dst_box.y += round(iter->state.y * output->scale);
+		iter = iter->parent;
+	}
+
 	struct wlr_texture *texture;
+
 	float matrix[9];
 	enum wl_output_transform transform;
 	switch (node->type) {
