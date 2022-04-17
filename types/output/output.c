@@ -300,7 +300,7 @@ void wlr_output_set_scale(struct wlr_output *output, float scale) {
 	}
 
 	output->pending.committed |= WLR_OUTPUT_STATE_SCALE;
-	output->pending.scale = scale;
+	output->pending.scale = wl_fixed_to_double(wl_fixed_from_double(scale));
 }
 
 void wlr_output_enable_adaptive_sync(struct wlr_output *output, bool enabled) {
