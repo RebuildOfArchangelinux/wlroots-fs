@@ -87,6 +87,14 @@ void wlr_box_transform(struct wlr_box *dest, const struct wlr_box *box,
 bool wlr_fbox_empty(const struct wlr_fbox *box);
 
 /**
+ * Gives the intersecting box between two struct wlr_fbox.
+ *
+ * Returns an empty box if the provided boxes don't intersect.
+ */
+bool wlr_fbox_intersection(struct wlr_fbox *dest, const struct wlr_fbox *box_a,
+	const struct wlr_fbox *box_b);
+
+/**
  * Transforms a floating-point box inside a (0, 0, width, height) box.
  */
 void wlr_fbox_transform(struct wlr_fbox *dest, const struct wlr_fbox *box,

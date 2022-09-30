@@ -60,7 +60,7 @@ struct tinywl_server {
 	enum tinywl_cursor_mode cursor_mode;
 	struct tinywl_view *grabbed_view;
 	double grab_x, grab_y;
-	struct wlr_box grab_geobox;
+	struct wlr_fbox grab_geobox;
 	uint32_t resize_edges;
 
 	struct wlr_output_layout *output_layout;
@@ -88,7 +88,7 @@ struct tinywl_view {
 	struct wl_listener request_resize;
 	struct wl_listener request_maximize;
 	struct wl_listener request_fullscreen;
-	int x, y;
+	double x, y;
 };
 
 struct tinywl_keyboard {
@@ -385,10 +385,10 @@ static void process_cursor_resize(struct tinywl_server *server, uint32_t time) {
 	struct tinywl_view *view = server->grabbed_view;
 	double border_x = server->cursor->x - server->grab_x;
 	double border_y = server->cursor->y - server->grab_y;
-	int new_left = server->grab_geobox.x;
-	int new_right = server->grab_geobox.x + server->grab_geobox.width;
-	int new_top = server->grab_geobox.y;
-	int new_bottom = server->grab_geobox.y + server->grab_geobox.height;
+	double new_left = server->grab_geobox.x;
+	double new_right = server->grab_geobox.x + server->grab_geobox.width;
+	double new_top = server->grab_geobox.y;
+	double new_bottom = server->grab_geobox.y + server->grab_geobox.height;
 
 	if (server->resize_edges & WLR_EDGE_TOP) {
 		new_top = border_y;
@@ -413,14 +413,14 @@ static void process_cursor_resize(struct tinywl_server *server, uint32_t time) {
 		}
 	}
 
-	struct wlr_box geo_box;
+	struct wlr_fbox geo_box;
 	wlr_xdg_surface_get_geometry(view->xdg_toplevel->base, &geo_box);
 	view->x = new_left - geo_box.x;
 	view->y = new_top - geo_box.y;
 	wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y);
 
-	int new_width = new_right - new_left;
-	int new_height = new_bottom - new_top;
+	double new_width = new_right - new_left;
+	double new_height = new_bottom - new_top;
 	wlr_xdg_toplevel_set_size(view->xdg_toplevel, new_width, new_height);
 }
 
@@ -674,7 +674,7 @@ static void begin_interactive(struct tinywl_view *view,
 		server->grab_x = server->cursor->x - view->x;
 		server->grab_y = server->cursor->y - view->y;
 	} else {
-		struct wlr_box geo_box;
+		struct wlr_fbox geo_box;
 		wlr_xdg_surface_get_geometry(view->xdg_toplevel->base, &geo_box);
 
 		double border_x = (view->x + geo_box.x) +

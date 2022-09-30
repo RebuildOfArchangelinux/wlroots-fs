@@ -534,11 +534,11 @@ struct wlr_layer_shell_v1 *wlr_layer_shell_v1_create(struct wl_display *display)
 struct layer_surface_iterator_data {
 	wlr_surface_iterator_func_t user_iterator;
 	void *user_data;
-	int x, y;
+	double x, y;
 };
 
 static void layer_surface_iterator(struct wlr_surface *surface,
-		int sx, int sy, void *data) {
+		double sx, double sy, void *data) {
 	struct layer_surface_iterator_data *iter_data = data;
 	iter_data->user_iterator(surface, iter_data->x + sx, iter_data->y + sy,
 		iter_data->user_data);
