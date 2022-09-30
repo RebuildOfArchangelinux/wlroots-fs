@@ -19,7 +19,6 @@ struct wlr_fractional_scale_global {
 
 	struct {
 		struct wl_signal destroy;
-		struct wl_signal new_fractional_scale; // struct *wlr_fractional_scale_v1
 	} events;
 
 	// private state
@@ -27,32 +26,10 @@ struct wlr_fractional_scale_global {
 	struct wl_listener display_destroy;
 };
 
-struct wlr_fractional_scale_v1 {
-	struct wl_resource *resource;
-
-	struct wlr_surface *surface;
-	double factor;
-
-	struct {
-		struct wl_signal destroy;
-		struct wl_signal set_scale_factor;
-	} events;
-
-	// private state
-
-	struct wlr_addon addon;
-};
-
 struct wlr_fractional_scale_global *wlr_fractional_scale_global_create(
 	struct wl_display *display);
 
-struct wlr_fractional_scale_v1 *wlr_fractional_scale_v1_from_surface(
-	struct wlr_surface *surface);
-
-void wlr_fractional_scale_v1_send_scale_factor(
-	struct wlr_fractional_scale_v1 *scale, double factor);
-
-double wlr_fractional_scale_v1_get_surface_factor(
-	struct wlr_surface *surface);
+bool wlr_fractional_scale_v1_send_scale_factor(
+	struct wlr_surface *surface, double factor);
 
 #endif

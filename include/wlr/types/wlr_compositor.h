@@ -150,6 +150,9 @@ struct wlr_surface {
 
 	struct wl_list current_outputs; // wlr_surface_output.link
 
+	double client_scale_factor; // pixels / client_scale_factor -> logical
+	double server_scale_factor; // logical * server_scale_factor -> pixels
+
 	struct wlr_addon_set addons;
 	void *data;
 

@@ -5,22 +5,20 @@
 
 #define FRACTIONAL_SCALE_V1_VERSION 1
 
+struct wlr_fractional_scale_v1 {
+	struct wl_resource *resource;
+	struct wlr_surface *surface;
+	struct wlr_addon addon;
+};
+
 static void resource_handle_destroy(struct wl_client *client,
 		struct wl_resource *resource) {
 	wl_resource_destroy(resource);
 }
 
-static const struct wp_fractional_scale_global_interface fractional_scale_global_impl;
 static const struct wp_fractional_scale_v1_interface fractional_scale_impl;
 
 static const char fractional_scale_v1_addon_owner = 0;
-
-static struct wlr_fractional_scale_global *fractional_scale_global_from_resource(
-		struct wl_resource *resource) {
-	assert(wl_resource_instance_of(resource,
-		&wp_fractional_scale_global_interface, &fractional_scale_global_impl));
-	return wl_resource_get_user_data(resource);
-}
 
 static struct wlr_fractional_scale_v1 *fractional_scale_v1_from_resource(
 		struct wl_resource *resource) {
@@ -53,8 +51,7 @@ static void fractional_scale_handle_set_scale_factor(struct wl_client *client,
 			"scale value is not valid");
 		return;
 	}
-	scale->factor = (double)scale_8_24 / (1 << 24);
-	wl_signal_emit_mutable(&scale->events.set_scale_factor, NULL);
+	scale->surface->client_scale_factor = (double)scale_8_24 / (1 << 24);
 }
 
 static const struct wp_fractional_scale_v1_interface fractional_scale_impl = {
@@ -68,7 +65,6 @@ static void fractional_scale_resource_destroy(struct wl_resource *resource) {
 	if (scale == NULL) {
 		return;
 	}
-	wl_signal_emit_mutable(&scale->events.destroy, NULL);
 	wlr_addon_finish(&scale->addon);
 	free(scale);
 }
@@ -76,9 +72,6 @@ static void fractional_scale_resource_destroy(struct wl_resource *resource) {
 static void fractional_scale_global_handle_get_fractional_scale(
 		struct wl_client *client, struct wl_resource *resource,
 		uint32_t id, struct wl_resource *surface_resource) {
-	struct wlr_fractional_scale_global *global =
-		fractional_scale_global_from_resource(resource);
-
 	struct wlr_fractional_scale_v1 *scale = calloc(1, sizeof(*scale));
 	if (scale == NULL) {
 		wl_client_post_no_memory(client);
@@ -98,16 +91,11 @@ static void fractional_scale_global_handle_get_fractional_scale(
 	struct wlr_surface *wlr_surface =
 		wlr_surface_from_resource(surface_resource);
 	scale->surface = wlr_surface;
-	scale->factor = 1.0;
 	wlr_addon_init(&scale->addon, &wlr_surface->addons,
 		&fractional_scale_v1_addon_owner,
 		&fractional_scale_v1_addon_impl);
-	wl_signal_init(&scale->events.destroy);
-	wl_signal_init(&scale->events.set_scale_factor);
 	wl_resource_set_implementation(scale->resource,
 		&fractional_scale_impl, scale, fractional_scale_resource_destroy);
-
-	wl_signal_emit_mutable(&global->events.new_fractional_scale, scale);
 }
 
 static const struct wp_fractional_scale_global_interface fractional_scale_global_impl = {
@@ -154,7 +142,6 @@ struct wlr_fractional_scale_global *wlr_fractional_scale_global_create(
 	}
 
 	wl_signal_init(&global->events.destroy);
-	wl_signal_init(&global->events.new_fractional_scale);
 
 	global->display_destroy.notify = fractional_scale_global_handle_display_destroy;
 	wl_display_add_destroy_listener(display, &global->display_destroy);
@@ -162,31 +149,18 @@ struct wlr_fractional_scale_global *wlr_fractional_scale_global_create(
 	return global;
 }
 
-struct wlr_fractional_scale_v1 *wlr_fractional_scale_v1_from_surface(
-		struct wlr_surface *surface) {
+bool wlr_fractional_scale_v1_send_scale_factor(
+		struct wlr_surface *surface, double factor) {
 	struct wlr_addon *addon = wlr_addon_find(&surface->addons,
 		&fractional_scale_v1_addon_owner,
 		&fractional_scale_v1_addon_impl);
 	if (addon != NULL) {
 		struct wlr_fractional_scale_v1 *scale =
 			wl_container_of(addon, scale, addon);
-		return scale;
+		wp_fractional_scale_v1_send_scale_factor(scale->resource,
+			(uint32_t)(factor * (1 << 24)));
+		surface->server_scale_factor = factor;
+		return true;
 	}
 	return NULL;
-}
-
-void wlr_fractional_scale_v1_send_scale_factor(
-		struct wlr_fractional_scale_v1 *scale, double factor) {
-	wp_fractional_scale_v1_send_scale_factor(scale->resource,
-		(uint32_t)(factor * (1 << 24)));
-}
-
-double wlr_fractional_scale_v1_get_surface_factor(
-		struct wlr_surface *surface) {
-	struct wlr_fractional_scale_v1 *scale =
-		wlr_fractional_scale_v1_from_surface(surface);
-	if (scale != NULL) {
-		return scale->factor;
-	}
-	return 1.0;
 }
