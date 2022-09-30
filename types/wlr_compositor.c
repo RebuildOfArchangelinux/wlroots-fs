@@ -53,8 +53,8 @@ static void surface_handle_attach(struct wl_client *client,
 
 	if (wl_resource_get_version(resource) < WL_SURFACE_OFFSET_SINCE_VERSION) {
 		surface->pending.committed |= WLR_SURFACE_STATE_OFFSET;
-		surface->pending.dx = dx;
-		surface->pending.dy = dy;
+		surface->pending.dx = dx / surface->client_scale_factor;
+		surface->pending.dy = dy / surface->client_scale_factor;
 	}
 }
 
@@ -66,9 +66,13 @@ static void surface_handle_damage(struct wl_client *client,
 		return;
 	}
 	surface->pending.committed |= WLR_SURFACE_STATE_SURFACE_DAMAGE;
-	pixman_region32_union_rect(&surface->pending.surface_damage,
-		&surface->pending.surface_damage,
-		x, y, width, height);
+
+	pixman_region32_t rect;
+	pixman_region32_init_rect(&rect, x, y, width, height);
+	wlr_region_scale(&rect, &rect, 1 / surface->client_scale_factor);
+	pixman_region32_union(&surface->pending.surface_damage,
+		&surface->pending.surface_damage, &rect);
+	pixman_region32_fini(&rect);
 }
 
 static void callback_handle_resource_destroy(struct wl_resource *resource) {
@@ -102,6 +106,8 @@ static void surface_handle_set_opaque_region(struct wl_client *client,
 	if (region_resource) {
 		pixman_region32_t *region = wlr_region_from_resource(region_resource);
 		pixman_region32_copy(&surface->pending.opaque, region);
+		wlr_region_scale(&surface->pending.opaque,
+			&surface->pending.opaque, 1 / surface->client_scale_factor);
 	} else {
 		pixman_region32_clear(&surface->pending.opaque);
 	}
@@ -115,6 +121,8 @@ static void surface_handle_set_input_region(struct wl_client *client,
 	if (region_resource) {
 		pixman_region32_t *region = wlr_region_from_resource(region_resource);
 		pixman_region32_copy(&surface->pending.input, region);
+		wlr_region_scale(&surface->pending.input,
+			&surface->pending.input, 1 / surface->client_scale_factor);
 	} else {
 		pixman_region32_fini(&surface->pending.input);
 		pixman_region32_init_rect(&surface->pending.input,
@@ -191,18 +199,20 @@ static void surface_finalize_pending(struct wlr_surface *surface) {
 		}
 	}
 
+	// XXX: Doing the scaling here doesn't seem right
+	double factor = surface->client_scale_factor;
 	if (pending->viewport.has_dst) {
 		if (pending->buffer_width == 0 && pending->buffer_height == 0) {
 			pending->width = pending->height = 0;
 		} else {
-			pending->width = pending->viewport.dst_width;
-			pending->height = pending->viewport.dst_height;
+			pending->width = pending->viewport.dst_width / factor;
+			pending->height = pending->viewport.dst_height / factor;
 		}
 	} else {
 		int src_width, src_height;
 		surface_state_viewport_src_size(pending, &src_width, &src_height);
-		pending->width = src_width;
-		pending->height = src_height;
+		pending->width = src_width / factor;
+		pending->height = src_height / factor;
 	}
 
 	pixman_region32_intersect_rect(&pending->surface_damage,
@@ -537,8 +547,8 @@ static void surface_handle_offset(struct wl_client *client,
 	struct wlr_surface *surface = wlr_surface_from_resource(resource);
 
 	surface->pending.committed |= WLR_SURFACE_STATE_OFFSET;
-	surface->pending.dx = x;
-	surface->pending.dy = y;
+	surface->pending.dx = x / surface->client_scale_factor;
+	surface->pending.dy = y / surface->client_scale_factor;
 }
 
 static const struct wl_surface_interface surface_implementation = {
