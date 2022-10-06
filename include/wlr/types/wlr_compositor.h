@@ -46,7 +46,9 @@ struct wlr_surface_state {
 	struct wl_list frame_callback_list; // wl_resource
 
 	double width, height; // in surface-local coordinates
+
 	int buffer_width, buffer_height;
+	double logical_buffer_width, logical_buffer_height;
 
 	struct wl_list subsurfaces_below;
 	struct wl_list subsurfaces_above;
@@ -63,6 +65,7 @@ struct wlr_surface_state {
 		// In coordinates after scale/transform are applied, but before the
 		// destination rectangle is applied
 		struct wlr_fbox src;
+		double logical_src_width, logical_src_height; // in surface-local coordinates
 		double dst_width, dst_height; // in surface-local coordinates
 	} viewport;
 

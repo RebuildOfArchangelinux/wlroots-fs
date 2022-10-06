@@ -50,6 +50,10 @@ static void surface_handle_attach(struct wl_client *client,
 
 	wlr_buffer_unlock(surface->pending.buffer);
 	surface->pending.buffer = buffer;
+	surface->pending.buffer_width = buffer->width;
+	surface->pending.buffer_height = buffer->height;
+	surface->pending.logical_buffer_width = buffer->width / surface->client_scale_factor;
+	surface->pending.logical_buffer_height = buffer->height / surface->client_scale_factor;
 
 	if (wl_resource_get_version(resource) < WL_SURFACE_OFFSET_SINCE_VERSION) {
 		surface->pending.committed |= WLR_SURFACE_STATE_OFFSET;
@@ -170,15 +174,6 @@ static void surface_state_viewport_src_size(struct wlr_surface_state *state,
 static void surface_finalize_pending(struct wlr_surface *surface) {
 	struct wlr_surface_state *pending = &surface->pending;
 
-	if ((pending->committed & WLR_SURFACE_STATE_BUFFER)) {
-		if (pending->buffer != NULL) {
-			pending->buffer_width = pending->buffer->width;
-			pending->buffer_height = pending->buffer->height;
-		} else {
-			pending->buffer_width = pending->buffer_height = 0;
-		}
-	}
-
 	if (!pending->viewport.has_src &&
 			(pending->buffer_width % pending->scale != 0 ||
 			pending->buffer_height % pending->scale != 0)) {
@@ -199,20 +194,24 @@ static void surface_finalize_pending(struct wlr_surface *surface) {
 		}
 	}
 
-	// XXX: Doing the scaling here doesn't seem right
-	double factor = surface->client_scale_factor;
 	if (pending->viewport.has_dst) {
 		if (pending->buffer_width == 0 && pending->buffer_height == 0) {
 			pending->width = pending->height = 0;
 		} else {
-			pending->width = pending->viewport.dst_width / factor;
-			pending->height = pending->viewport.dst_height / factor;
+			pending->width = pending->viewport.dst_width;
+			pending->height = pending->viewport.dst_height;
 		}
+	} else if (pending->viewport.has_src) {
+		pending->width = pending->viewport.logical_src_width;
+		pending->height = pending->viewport.logical_src_height;
 	} else {
-		int src_width, src_height;
-		surface_state_viewport_src_size(pending, &src_width, &src_height);
-		pending->width = src_width / factor;
-		pending->height = src_height / factor;
+		if ((pending->transform & WL_OUTPUT_TRANSFORM_90) != 0) {
+			pending->width = pending->logical_buffer_height / pending->scale;
+			pending->height = pending->logical_buffer_width / pending->scale;
+		} else {
+			pending->width = pending->logical_buffer_width / pending->scale;
+			pending->height = pending->logical_buffer_height / pending->scale;
+		}
 	}
 
 	pixman_region32_intersect_rect(&pending->surface_damage,
@@ -277,8 +276,6 @@ static void surface_state_move(struct wlr_surface_state *state,
 		struct wlr_surface_state *next) {
 	state->width = next->width;
 	state->height = next->height;
-	state->buffer_width = next->buffer_width;
-	state->buffer_height = next->buffer_height;
 
 	if (next->committed & WLR_SURFACE_STATE_SCALE) {
 		state->scale = next->scale;
@@ -301,6 +298,8 @@ static void surface_state_move(struct wlr_surface_state *state,
 		}
 		wlr_buffer_unlock(next->buffer);
 		next->buffer = NULL;
+		state->buffer_width = next->buffer_width;
+		state->buffer_height = next->buffer_height;
 	}
 	if (next->committed & WLR_SURFACE_STATE_SURFACE_DAMAGE) {
 		pixman_region32_copy(&state->surface_damage, &next->surface_damage);

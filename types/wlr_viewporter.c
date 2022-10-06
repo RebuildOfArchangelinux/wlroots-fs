@@ -61,6 +61,8 @@ static void viewport_handle_set_source(struct wl_client *client,
 	pending->viewport.src.y = y;
 	pending->viewport.src.width = width;
 	pending->viewport.src.height = height;
+	pending->viewport.logical_src_width = width / viewport->surface->client_scale_factor;
+	pending->viewport.logical_src_height = height / viewport->surface->client_scale_factor;
 
 	pending->committed |= WLR_SURFACE_STATE_VIEWPORT;
 }
@@ -86,8 +88,8 @@ static void viewport_handle_set_destination(struct wl_client *client,
 		pending->viewport.has_dst = true;
 	}
 
-	pending->viewport.dst_width = width;
-	pending->viewport.dst_height = height;
+	pending->viewport.dst_width = width / viewport->surface->client_scale_factor;
+	pending->viewport.dst_height = height / viewport->surface->client_scale_factor;
 
 	pending->committed |= WLR_SURFACE_STATE_VIEWPORT;
 }
