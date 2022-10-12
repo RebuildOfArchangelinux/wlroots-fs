@@ -50,10 +50,16 @@ static void surface_handle_attach(struct wl_client *client,
 
 	wlr_buffer_unlock(surface->pending.buffer);
 	surface->pending.buffer = buffer;
-	surface->pending.buffer_width = buffer->width;
-	surface->pending.buffer_height = buffer->height;
-	surface->pending.logical_buffer_width = buffer->width / surface->client_scale_factor;
-	surface->pending.logical_buffer_height = buffer->height / surface->client_scale_factor;
+	if (buffer != NULL) {
+		// TODO: Clean the hack ...
+		surface->pending.buffer_width = buffer->width;
+		surface->pending.buffer_height = buffer->height;
+		surface->pending.logical_buffer_width = buffer->width / surface->client_scale_factor;
+		surface->pending.logical_buffer_height = buffer->height / surface->client_scale_factor;
+	} else {
+		surface->pending.buffer_width = surface->pending.buffer_height = 0;
+		surface->pending.logical_buffer_width = surface->pending.logical_buffer_height = 0.;
+	}
 
 	if (wl_resource_get_version(resource) < WL_SURFACE_OFFSET_SINCE_VERSION) {
 		surface->pending.committed |= WLR_SURFACE_STATE_OFFSET;

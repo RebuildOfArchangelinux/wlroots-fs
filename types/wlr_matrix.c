@@ -167,3 +167,32 @@ void wlr_matrix_project_box(float mat[static 9], const struct wlr_box *box,
 
 	wlr_matrix_multiply(mat, projection, mat);
 }
+
+void wlr_matrix_project_fbox(float mat[static 9], const struct wlr_fbox *box,
+		enum wl_output_transform transform, float rotation,
+		const float projection[static 9]) {
+	float x = box->x;
+	float y = box->y;
+	float width = box->width;
+	float height = box->height;
+
+	wlr_matrix_identity(mat);
+	wlr_matrix_translate(mat, x, y);
+
+	if (rotation != 0) {
+		wlr_matrix_translate(mat, width/2, height/2);
+		wlr_matrix_rotate(mat, rotation);
+		wlr_matrix_translate(mat, -width/2, -height/2);
+	}
+
+	wlr_matrix_scale(mat, width, height);
+
+	if (transform != WL_OUTPUT_TRANSFORM_NORMAL) {
+		wlr_matrix_translate(mat, 0.5, 0.5);
+		wlr_matrix_transform(mat, transform);
+		wlr_matrix_translate(mat, -0.5, -0.5);
+	}
+
+	wlr_matrix_multiply(mat, projection, mat);
+}
+

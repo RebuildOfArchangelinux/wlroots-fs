@@ -6,8 +6,8 @@
 #error "Add -DWLR_USE_UNSTABLE to enable unstable wlroots features"
 #endif
 
-#ifndef WLR_TYPES_WLR_XDG_ACTIVATION_V1
-#define WLR_TYPES_WLR_XDG_ACTIVATION_V1
+#ifndef WLR_TYPES_WLR_XDG_FRACTIONAL_SCALE_V1
+#define WLR_TYPES_WLR_XDG_FRACTIONAL_SCALE_V1
 
 #include <wayland-server-core.h>
 
