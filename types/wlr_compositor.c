@@ -9,6 +9,7 @@
 #include <wlr/types/wlr_region.h>
 #include <wlr/types/wlr_subcompositor.h>
 #include <wlr/types/wlr_output.h>
+#include <wlr/types/wlr_fractional_scale_v1.h>
 #include <wlr/util/log.h>
 #include <wlr/util/region.h>
 #include "types/wlr_buffer.h"
@@ -906,6 +907,7 @@ void wlr_surface_send_enter(struct wlr_surface *surface,
 	wl_resource_for_each(resource, &output->resources) {
 		if (client == wl_resource_get_client(resource)) {
 			wl_surface_send_enter(surface->resource, resource);
+			wlr_fractional_scale_v1_send_scale_factor(surface, output->scale);
 		}
 	}
 }

@@ -162,5 +162,5 @@ bool wlr_fractional_scale_v1_send_scale_factor(
 		surface->server_scale_factor = factor;
 		return true;
 	}
-	return NULL;
+	return false;
 }
