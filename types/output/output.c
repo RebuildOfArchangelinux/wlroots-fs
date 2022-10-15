@@ -264,7 +264,7 @@ void wlr_output_set_transform(struct wlr_output *output,
 }
 
 void wlr_output_set_scale(struct wlr_output *output, float scale) {
-	wlr_output_state_set_scale(&output->pending, scale);
+	wlr_output_state_set_scale(&output->pending, wl_fixed_to_double(wl_fixed_from_double(scale)));
 }
 
 void wlr_output_enable_adaptive_sync(struct wlr_output *output, bool enabled) {

@@ -188,6 +188,15 @@ clients = {
 			'input-method-unstable-v2',
 		],
 	},
+	'fractional-scale': {
+		'src': 'fractional-scale.c',
+		'proto': [
+			'wp-fractional-scale-v1',
+			'xdg-shell',
+			'viewporter',
+		],
+		'dep': [math],
+	},
 }
 
 foreach name, info : compositors

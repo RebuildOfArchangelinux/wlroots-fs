@@ -9,6 +9,7 @@
 #include <wlr/types/wlr_matrix.h>
 #include <wlr/types/wlr_presentation_time.h>
 #include <wlr/types/wlr_scene.h>
+#include <wlr/types/wlr_fractional_scale_v1.h>
 #include <wlr/util/log.h>
 #include <wlr/util/region.h>
 #include "types/wlr_buffer.h"
@@ -360,6 +361,10 @@ static void update_node_update_outputs(struct wlr_scene_node *node,
 	// if there are active outputs on this node, we should always have a primary
 	// output
 	assert(!scene_buffer->active_outputs || scene_buffer->primary_output);
+	// if (scene_buffer->primary_output != NULL) {
+	// 	wlr_fractional_scale_v1_notify_scale(scene_buffer->surface,
+	// 		scene_buffer->primary_output->scale);
+	// }
 }
 
 static bool scene_node_update_iterator(struct wlr_scene_node *node,
@@ -1056,14 +1061,36 @@ static void scene_node_render(struct wlr_scene_node *node,
 		return;
 	}
 
+	if (node->type == WLR_SCENE_NODE_ROOT ||
+			node->type == WLR_SCENE_NODE_TREE) {
+		return;
+	}
+
 	struct wlr_box dst_box = {
-		.x = x,
-		.y = y,
+		.x = node->state.x,
+		.y = node->state.y,
 	};
+
+	// Add wlr_scene_surface withing wlr_scene_subsurface_tree position
+	// (basically wl_subsurface position)
+	// surface@0,0 <- tree@x,y <- surface parent
+	struct wlr_scene_node *iter = node->parent;
+	dst_box.x += iter->state.x;
+	dst_box.y += iter->state.y;
+	iter = iter->parent;
+
 	scene_node_get_size(node, &dst_box.width, &dst_box.height);
 	scale_box(&dst_box, output->scale);
 
+	// Add stably rounded scaled parent position
+	while (iter != NULL) {
+		dst_box.x += round(iter->state.x * output->scale);
+		dst_box.y += round(iter->state.y * output->scale);
+		iter = iter->parent;
+	}
+
 	struct wlr_texture *texture;
+
 	float matrix[9];
 	enum wl_output_transform transform;
 	switch (node->type) {
@@ -1283,9 +1310,11 @@ struct wlr_scene_output *wlr_scene_get_scene_output(struct wlr_scene *scene,
 
 void wlr_scene_output_set_position(struct wlr_scene_output *scene_output,
 		int lx, int ly) {
+/* This is called when the output is reconfigured with a different scale but
+ * with the same size. The conditional below would stop
 	if (scene_output->x == lx && scene_output->y == ly) {
 		return;
-	}
+	}*/
 
 	scene_output->x = lx;
 	scene_output->y = ly;
