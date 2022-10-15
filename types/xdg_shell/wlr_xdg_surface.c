@@ -227,6 +227,7 @@ static void xdg_surface_handle_set_window_geometry(struct wl_client *client,
 	surface->pending.geometry.y = y / factor;
 	surface->pending.geometry.width = width / factor;
 	surface->pending.geometry.height = height / factor;
+	// printf("Send XDG Set window geometry %d,%d %d,%d %lf\n", x, y, width, height, factor);
 }
 
 static void xdg_surface_handle_destroy(struct wl_client *client,
