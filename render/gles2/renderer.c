@@ -159,7 +159,7 @@ static bool gles2_bind_buffer(struct wlr_renderer *wlr_renderer,
 		assert(wlr_egl_is_current(renderer->egl));
 
 		push_gles2_debug(renderer);
-		glFlush();
+		glFinish();
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		pop_gles2_debug(renderer);
 
@@ -312,6 +312,8 @@ static bool gles2_render_subtexture_with_matrix(
 		x2, y2, // bottom right
 		x1, y2, // bottom left
 	};
+	// printf("Render %lf,%lf %lf,%lf %d,%d %lf,%lf %lf,%lf\n", box->x, box->y, box->width,
+	// 	box->height, wlr_texture->width, wlr_texture->height, x1, y1, x2, y2);
 
 	glVertexAttribPointer(shader->pos_attrib, 2, GL_FLOAT, GL_FALSE, 0, verts);
 	glVertexAttribPointer(shader->tex_attrib, 2, GL_FLOAT, GL_FALSE, 0, texcoord);

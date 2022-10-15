@@ -16,6 +16,7 @@
 #include "types/wlr_region.h"
 #include "types/wlr_subcompositor.h"
 #include "util/time.h"
+#include <stdio.h>
 
 #define COMPOSITOR_VERSION 5
 #define CALLBACK_VERSION 1
@@ -224,6 +225,9 @@ static void surface_finalize_pending(struct wlr_surface *surface) {
 	pixman_region32_intersect_rect(&pending->surface_damage,
 		&pending->surface_damage, 0, 0, pending->width, pending->height);
 
+	pixman_box32_t *damage_box = pixman_region32_extents(&pending->buffer_damage);
+	printf("Pending damage rect %d %d %d %d\n", damage_box->x1, damage_box->y1, damage_box->x2, damage_box->y2);
+
 	pixman_region32_intersect_rect(&pending->buffer_damage,
 		&pending->buffer_damage, 0, 0, pending->buffer_width,
 		pending->buffer_height);
@@ -358,12 +362,17 @@ static void surface_apply_damage(struct wlr_surface *surface) {
 	surface->opaque = buffer_is_opaque(surface->current.buffer);
 
 	if (surface->buffer != NULL) {
+		pixman_region32_t damage;
+		pixman_region32_init(&damage);
+		wlr_region_scale(&damage, &surface->buffer_damage, surface->server_scale_factor);
 		if (wlr_client_buffer_apply_damage(surface->buffer,
-				surface->current.buffer, &surface->buffer_damage)) {
+				surface->current.buffer, &damage)) {
 			wlr_buffer_unlock(surface->current.buffer);
 			surface->current.buffer = NULL;
+			pixman_region32_fini(&damage);
 			return;
 		}
+		pixman_region32_fini(&damage);
 	}
 
 	struct wlr_client_buffer *buffer = wlr_client_buffer_create(
@@ -545,7 +554,8 @@ static void surface_handle_damage_buffer(struct wl_client *client,
 	surface->pending.committed |= WLR_SURFACE_STATE_BUFFER_DAMAGE;
 	pixman_region32_union_rect(&surface->pending.buffer_damage,
 		&surface->pending.buffer_damage,
-		x, y, width, height);
+		x / surface->client_scale_factor, y / surface->client_scale_factor,
+		width / surface->client_scale_factor, height / surface->client_scale_factor);
 }
 
 static void surface_handle_offset(struct wl_client *client,
@@ -906,8 +916,8 @@ void wlr_surface_send_enter(struct wlr_surface *surface,
 
 	wl_resource_for_each(resource, &output->resources) {
 		if (client == wl_resource_get_client(resource)) {
-			wl_surface_send_enter(surface->resource, resource);
 			wlr_fractional_scale_v1_send_scale_factor(surface, output->scale);
+			wl_surface_send_enter(surface->resource, resource);
 		}
 	}
 }
@@ -1022,6 +1032,8 @@ void wlr_surface_get_effective_damage(struct wlr_surface *surface,
 		pixman_region32_t *damage) {
 	pixman_region32_clear(damage);
 
+	pixman_box32_t *damage_box = pixman_region32_extents(&surface->buffer_damage);
+	printf("Surface buffer damage rect %d %d %d %d\n", damage_box->x1, damage_box->y1, damage_box->x2, damage_box->y2);
 	// Transform and copy the buffer damage in terms of surface coordinates.
 	wlr_region_transform(damage, &surface->buffer_damage,
 		surface->current.transform, surface->current.buffer_width,

@@ -137,10 +137,10 @@ bool wlr_fbox_intersection(struct wlr_fbox *dest, const struct wlr_fbox *box_a,
 		return false;
 	}
 
-	int x1 = fmax(box_a->x, box_b->x);
-	int y1 = fmax(box_a->y, box_b->y);
-	int x2 = fmin(box_a->x + box_a->width, box_b->x + box_b->width);
-	int y2 = fmin(box_a->y + box_a->height, box_b->y + box_b->height);
+	double x1 = fmax(box_a->x, box_b->x);
+	double y1 = fmax(box_a->y, box_b->y);
+	double x2 = fmin(box_a->x + box_a->width, box_b->x + box_b->width);
+	double y2 = fmin(box_a->y + box_a->height, box_b->y + box_b->height);
 
 	dest->x = x1;
 	dest->y = y1;
@@ -196,6 +196,25 @@ void wlr_fbox_transform(struct wlr_fbox *dest, const struct wlr_fbox *box,
 		dest->y = width - src.x - src.width;
 		break;
 	}
+}
+
+bool wlr_fbox_contains_point(const struct wlr_fbox *box, double x, double y) {
+	if (wlr_fbox_empty(box)) {
+		return false;
+	} else {
+		return x >= box->x && x < box->x + box->width &&
+			y >= box->y && y < box->y + box->height;
+	}
+}
+
+void wlr_fbox_to_box_trunc(struct wlr_box *dest, const struct wlr_fbox *src) {
+	dest->x = src->x, dest->y = src->y;
+	dest->width = src->width, dest->height = src->height;
+}
+
+void wlr_box_to_fbox(struct wlr_fbox *dest, const struct wlr_box *src) {
+	dest->x = src->x, dest->y = src->y;
+	dest->width = src->width, dest->height = src->height;
 }
 
 #ifdef WLR_USE_UNSTABLE
