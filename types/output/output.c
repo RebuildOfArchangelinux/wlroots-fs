@@ -367,7 +367,7 @@ void wlr_output_init(struct wlr_output *output, struct wlr_backend *backend,
 	wl_signal_init(&output->events.destroy);
 	output_state_init(&output->pending);
 
-	output->software_cursor_locks = env_parse_bool("WLR_NO_HARDWARE_CURSORS");
+	output->software_cursor_locks = !env_parse_bool("WLR_USE_HARDWARE_CURSORS");
 	if (output->software_cursor_locks) {
 		wlr_log(WLR_DEBUG, "WLR_NO_HARDWARE_CURSORS set, forcing software cursors");
 	}

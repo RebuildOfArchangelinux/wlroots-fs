@@ -224,7 +224,7 @@ struct wlr_xdg_surface_configure {
 
 struct wlr_xdg_surface_state {
 	uint32_t configure_serial;
-	struct wlr_box geometry;
+	struct wlr_fbox geometry;
 };
 
 /**
@@ -502,7 +502,7 @@ struct wlr_xdg_surface *wlr_xdg_surface_from_wlr_surface(
  * The x and y value can be < 0.
  */
 void wlr_xdg_surface_get_geometry(struct wlr_xdg_surface *surface,
-		struct wlr_box *box);
+		struct wlr_fbox *box);
 
 /**
  * Call `iterator` on each mapped surface and popup in the xdg-surface tree

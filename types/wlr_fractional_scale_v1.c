@@ -4,7 +4,6 @@
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_fractional_scale_v1.h>
 #include <wlr/util/log.h>
-#include "util/signal.h"
 
 #include "wp-fractional-scale-v1-protocol.h"
 
@@ -206,7 +205,7 @@ static void fractional_scale_manager_bind(struct wl_client *client, void *data,
 static void handle_display_destroy(struct wl_listener *listener, void *data) {
 	struct wlr_fractional_scale_manager_v1 *mgr =
 		wl_container_of(listener, mgr, display_destroy);
-	wlr_signal_emit_safe(&mgr->events.destroy, NULL);
+	wl_signal_emit_mutable(&mgr->events.destroy, NULL);
 	wl_global_destroy(mgr->global);
 	free(mgr);
 }

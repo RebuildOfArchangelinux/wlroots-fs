@@ -1061,32 +1061,30 @@ static void scene_node_render(struct wlr_scene_node *node,
 		return;
 	}
 
-	if (node->type == WLR_SCENE_NODE_ROOT ||
-			node->type == WLR_SCENE_NODE_TREE) {
+	if (node->type == WLR_SCENE_NODE_TREE) {
 		return;
 	}
 
 	struct wlr_box dst_box = {
-		.x = node->state.x,
-		.y = node->state.y,
+		.x = node->x,
+		.y = node->y,
 	};
 
 	// Add wlr_scene_surface withing wlr_scene_subsurface_tree position
 	// (basically wl_subsurface position)
 	// surface@0,0 <- tree@x,y <- surface parent
-	struct wlr_scene_node *iter = node->parent;
-	dst_box.x += iter->state.x;
-	dst_box.y += iter->state.y;
-	iter = iter->parent;
+	struct wlr_scene_node *iter = &(node->parent->node);
+	dst_box.x += iter->x;
+	dst_box.y += iter->y;
 
 	scene_node_get_size(node, &dst_box.width, &dst_box.height);
 	scale_box(&dst_box, output->scale);
 
 	// Add stably rounded scaled parent position
 	while (iter != NULL) {
-		dst_box.x += round(iter->state.x * output->scale);
-		dst_box.y += round(iter->state.y * output->scale);
-		iter = iter->parent;
+		dst_box.x += round(iter->x * output->scale);
+		dst_box.y += round(iter->y * output->scale);
+		iter = &(iter->parent->node);
 	}
 
 	struct wlr_texture *texture;

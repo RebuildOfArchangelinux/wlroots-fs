@@ -92,6 +92,15 @@ bool wlr_fbox_empty(const struct wlr_fbox *box);
 void wlr_fbox_transform(struct wlr_fbox *dest, const struct wlr_fbox *box,
 	enum wl_output_transform transform, double width, double height);
 
+bool wlr_fbox_intersection(struct wlr_fbox *dest, const struct wlr_fbox *box_a,
+	const struct wlr_fbox *box_b);
+
+bool wlr_fbox_contains_point(const struct wlr_fbox *box, double x, double y);
+
+void wlr_box_to_fbox(struct wlr_fbox *dest, const struct wlr_box *src);
+
+void wlr_fbox_to_box_trunc(struct wlr_box *dest, const struct wlr_fbox *src);
+
 #ifdef WLR_USE_UNSTABLE
 
 /**
