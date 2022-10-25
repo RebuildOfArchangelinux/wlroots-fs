@@ -58,6 +58,7 @@ protocols = {
 
 	# WIP protocols
 	'wp-fractional-scale-v1': 'wp-fractional-scale-v1.xml',
+	'wp-fractional-scale-wrath-v1': 'wp-fractional-scale-wrath-v1.xml',
 }
 
 protocols_code = {}
