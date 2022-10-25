@@ -22,19 +22,22 @@
 
 static struct wlr_scene_tree *scene_tree_from_node(struct wlr_scene_node *node) {
 	assert(node->type == WLR_SCENE_NODE_TREE);
-	return (struct wlr_scene_tree *)node;
+	struct wlr_scene_tree *tree = wl_container_of(node, tree, node);
+	return tree;
 }
 
 static struct wlr_scene_rect *scene_rect_from_node(
 		struct wlr_scene_node *node) {
 	assert(node->type == WLR_SCENE_NODE_RECT);
-	return (struct wlr_scene_rect *)node;
+	struct wlr_scene_rect *rect = wl_container_of(node, rect, node);
+	return rect;
 }
 
 struct wlr_scene_buffer *wlr_scene_buffer_from_node(
 		struct wlr_scene_node *node) {
 	assert(node->type == WLR_SCENE_NODE_BUFFER);
-	return (struct wlr_scene_buffer *)node;
+	struct wlr_scene_buffer *buffer = wl_container_of(node, buffer, node);
+	return buffer;
 }
 
 struct wlr_scene *scene_node_get_root(struct wlr_scene_node *node) {
@@ -268,6 +271,14 @@ static uint32_t region_area(pixman_region32_t *region) {
 	return area;
 }
 
+static void scale_output_damage(pixman_region32_t *damage, float scale) {
+	wlr_region_scale(damage, damage, scale);
+
+	if (floor(scale) != scale) {
+		wlr_region_expand(damage, damage, 1);
+	}
+}
+
 static void scene_damage_outputs(struct wlr_scene *scene, pixman_region32_t *damage) {
 	if (!pixman_region32_not_empty(damage)) {
 		return;
@@ -280,8 +291,7 @@ static void scene_damage_outputs(struct wlr_scene *scene, pixman_region32_t *dam
 		pixman_region32_copy(&output_damage, damage);
 		pixman_region32_translate(&output_damage,
 			-scene_output->x, -scene_output->y);
-		wlr_region_scale(&output_damage, &output_damage,
-			scene_output->output->scale);
+		scale_output_damage(&output_damage, scene_output->output->scale);
 		if (wlr_damage_ring_add(&scene_output->damage_ring, &output_damage)) {
 			wlr_output_schedule_frame(scene_output->output);
 		}
@@ -568,6 +578,9 @@ void wlr_scene_buffer_set_buffer_with_damage(struct wlr_scene_buffer *scene_buff
 	bool update = false;
 	wlr_buffer_unlock(scene_buffer->buffer);
 
+	wlr_texture_destroy(scene_buffer->texture);
+	scene_buffer->texture = NULL;
+
 	if (buffer) {
 		// if this node used to not be mapped or its previous displayed
 		// buffer region will be different from what the new buffer would
@@ -647,6 +660,11 @@ void wlr_scene_buffer_set_buffer_with_damage(struct wlr_scene_buffer *scene_buff
 		pixman_region32_translate(&cull_region, -lx * output_scale, -ly * output_scale);
 		pixman_region32_intersect(&output_damage, &output_damage, &cull_region);
 		pixman_region32_fini(&cull_region);
+
+		// if we are using fractional scaling add a 1px margin.
+		if (floor(output_scale) != output_scale) {
+			wlr_region_expand(&output_damage, &output_damage, 1);
+		}
 
 		pixman_region32_translate(&output_damage,
 			(lx - scene_output->x) * output_scale,
@@ -1054,7 +1072,7 @@ static void scene_node_render(struct wlr_scene_node *node,
 	pixman_region32_init(&render_region);
 	pixman_region32_copy(&render_region, &node->visible);
 	pixman_region32_translate(&render_region, -scene_output->x, -scene_output->y);
-	wlr_region_scale(&render_region, &render_region, output->scale);
+	scale_output_damage(&render_region, output->scale);
 	pixman_region32_intersect(&render_region, &render_region, damage);
 	if (!pixman_region32_not_empty(&render_region)) {
 		pixman_region32_fini(&render_region);
@@ -1555,6 +1573,8 @@ bool wlr_scene_output_commit(struct wlr_scene_output *scene_output) {
 	// scene nodes above. Those scene nodes will just render atop having us
 	// never see the background.
 	if (scene_output->scene->calculate_visibility) {
+		float output_scale = scene_output->output->scale;
+
 		for (int i = list_len - 1; i >= 0; i--) {
 			struct wlr_scene_node *node = list_data[i];
 			int x, y;
@@ -1571,9 +1591,17 @@ bool wlr_scene_output_commit(struct wlr_scene_output *scene_output) {
 			pixman_region32_intersect(&opaque, &opaque, &node->visible);
 
 			pixman_region32_translate(&opaque, -scene_output->x, -scene_output->y);
-			wlr_region_scale(&opaque, &opaque, scene_output->output->scale);
+			wlr_region_scale(&opaque, &opaque, output_scale);
 			pixman_region32_subtract(&background, &background, &opaque);
 			pixman_region32_fini(&opaque);
+		}
+
+		if (floor(output_scale) != output_scale) {
+			wlr_region_expand(&background, &background, 1);
+
+			// reintersect with the damage because we never want to render
+			// outside of the damage region
+			pixman_region32_intersect(&background, &background, &damage);
 		}
 	}
 

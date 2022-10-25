@@ -159,6 +159,7 @@ static struct wlr_xwayland_surface *xwayland_surface_create(
 	wl_list_init(&surface->children);
 	wl_list_init(&surface->stack_link);
 	wl_list_init(&surface->parent_link);
+	wl_list_init(&surface->unpaired_link);
 	wl_signal_init(&surface->events.destroy);
 	wl_signal_init(&surface->events.request_configure);
 	wl_signal_init(&surface->events.request_move);
@@ -406,9 +407,7 @@ static void xwayland_surface_destroy(
 		child->parent = NULL;
 	}
 
-	if (xsurface->surface_id) {
-		wl_list_remove(&xsurface->unpaired_link);
-	}
+	wl_list_remove(&xsurface->unpaired_link);
 
 	if (xsurface->surface) {
 		wl_list_remove(&xsurface->surface_destroy.link);
@@ -879,6 +878,10 @@ static void xwm_map_shell_surface(struct wlr_xwm *xwm,
 		return;
 	}
 
+	wl_list_remove(&xsurface->unpaired_link);
+	wl_list_init(&xsurface->unpaired_link);
+	xsurface->surface_id = 0;
+
 	xsurface->surface = surface;
 
 	// read all surface properties
@@ -913,13 +916,12 @@ static void xsurface_unmap(struct wlr_xwayland_surface *surface) {
 		xwm_set_net_client_list(surface->xwm);
 	}
 
-	if (surface->surface_id) {
-		// Make sure we're not on the unpaired surface list or we
-		// could be assigned a surface during surface creation that
-		// was mapped before this unmap request.
-		wl_list_remove(&surface->unpaired_link);
-		surface->surface_id = 0;
-	}
+	// Make sure we're not on the unpaired surface list or we
+	// could be assigned a surface during surface creation that
+	// was mapped before this unmap request.
+	wl_list_remove(&surface->unpaired_link);
+	wl_list_init(&surface->unpaired_link);
+	surface->surface_id = 0;
 
 	if (surface->surface) {
 		wl_list_remove(&surface->surface_destroy.link);
@@ -1129,6 +1131,7 @@ static void xwm_handle_surface_id_message(struct wlr_xwm *xwm,
 		xwm_map_shell_surface(xwm, xsurface, surface);
 	} else {
 		xsurface->surface_id = id;
+		wl_list_remove(&xsurface->unpaired_link);
 		wl_list_insert(&xwm->unpaired_surfaces, &xsurface->unpaired_link);
 	}
 }
@@ -1147,38 +1150,26 @@ static void xwm_handle_surface_id_message(struct wlr_xwm *xwm,
 #define _NET_WM_MOVERESIZE_CANCEL 11  // cancel operation
 
 static enum wlr_edges net_wm_edges_to_wlr(uint32_t net_wm_edges) {
-	enum wlr_edges edges = WLR_EDGE_NONE;
-
 	switch(net_wm_edges) {
 	case _NET_WM_MOVERESIZE_SIZE_TOPLEFT:
-		edges = WLR_EDGE_TOP | WLR_EDGE_LEFT;
-		break;
+		return WLR_EDGE_TOP | WLR_EDGE_LEFT;
 	case _NET_WM_MOVERESIZE_SIZE_TOP:
-		edges = WLR_EDGE_TOP;
-		break;
+		return WLR_EDGE_TOP;
 	case _NET_WM_MOVERESIZE_SIZE_TOPRIGHT:
-		edges = WLR_EDGE_TOP | WLR_EDGE_RIGHT;
-		break;
+		return WLR_EDGE_TOP | WLR_EDGE_RIGHT;
 	case _NET_WM_MOVERESIZE_SIZE_RIGHT:
-		edges = WLR_EDGE_RIGHT;
-		break;
+		return WLR_EDGE_RIGHT;
 	case _NET_WM_MOVERESIZE_SIZE_BOTTOMRIGHT:
-		edges = WLR_EDGE_BOTTOM | WLR_EDGE_RIGHT;
-		break;
+		return WLR_EDGE_BOTTOM | WLR_EDGE_RIGHT;
 	case _NET_WM_MOVERESIZE_SIZE_BOTTOM:
-		edges = WLR_EDGE_BOTTOM;
-		break;
+		return WLR_EDGE_BOTTOM;
 	case _NET_WM_MOVERESIZE_SIZE_BOTTOMLEFT:
-		edges = WLR_EDGE_BOTTOM | WLR_EDGE_LEFT;
-		break;
+		return WLR_EDGE_BOTTOM | WLR_EDGE_LEFT;
 	case _NET_WM_MOVERESIZE_SIZE_LEFT:
-		edges = WLR_EDGE_LEFT;
-		break;
+		return WLR_EDGE_LEFT;
 	default:
-		break;
+		return WLR_EDGE_NONE;
 	}
-
-	return edges;
 }
 
 static void xwm_handle_net_wm_moveresize_message(struct wlr_xwm *xwm,
@@ -1667,8 +1658,6 @@ static void handle_compositor_new_surface(struct wl_listener *listener,
 	wl_list_for_each(xsurface, &xwm->unpaired_surfaces, unpaired_link) {
 		if (xsurface->surface_id == surface_id) {
 			xwm_map_shell_surface(xwm, xsurface, surface);
-			xsurface->surface_id = 0;
-			wl_list_remove(&xsurface->unpaired_link);
 			xcb_flush(xwm->xcb_conn);
 			return;
 		}
