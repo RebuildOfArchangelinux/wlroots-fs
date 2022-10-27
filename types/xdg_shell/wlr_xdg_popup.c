@@ -30,8 +30,8 @@ struct wlr_xdg_popup_configure *send_xdg_popup_configure(
 
 	struct wlr_box *geometry = &configure->geometry;
 	xdg_popup_send_configure(popup->resource,
-		geometry->x, geometry->y,
-		geometry->width, geometry->height);
+		round(geometry->x), round(geometry->y),
+		round(geometry->width), round(geometry->height));
 
 	popup->scheduled.fields = 0;
 

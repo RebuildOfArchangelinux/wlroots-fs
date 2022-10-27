@@ -95,7 +95,7 @@ struct wlr_xwm {
 	struct wl_event_source *event_source;
 	struct wlr_seat *seat;
 	uint32_t ping_timeout;
-        uint32_t scale;
+	double scale;
 
 	xcb_atom_t atoms[ATOM_LAST];
 	xcb_connection_t *xcb_conn;

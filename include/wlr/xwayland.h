@@ -130,9 +130,9 @@ struct wlr_xwayland_surface {
 	struct wl_list unpaired_link;
 
 	struct wlr_surface *surface;
-	int16_t x, y;
-	uint16_t width, height;
-	uint16_t saved_width, saved_height;
+	double x, y;
+	double width, height;
+	double saved_width, saved_height;
 	bool override_redirect;
 	bool mapped;
 
@@ -202,8 +202,8 @@ struct wlr_xwayland_surface {
 
 struct wlr_xwayland_surface_configure_event {
 	struct wlr_xwayland_surface *surface;
-	int16_t x, y;
-	uint16_t width, height;
+	double x, y;
+	double width, height;
 	uint16_t mask; // xcb_config_window_t
 };
 
@@ -257,7 +257,7 @@ void wlr_xwayland_surface_restack(struct wlr_xwayland_surface *surface,
 	struct wlr_xwayland_surface *sibling, enum xcb_stack_mode_t mode);
 
 void wlr_xwayland_surface_configure(struct wlr_xwayland_surface *surface,
-	int16_t x, int16_t y, uint16_t width, uint16_t height);
+	double x, double y, double width, double height);
 
 void wlr_xwayland_surface_close(struct wlr_xwayland_surface *surface);
 

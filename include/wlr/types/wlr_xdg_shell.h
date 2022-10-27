@@ -156,9 +156,9 @@ struct wlr_xdg_toplevel_configure {
 	uint32_t fields; // enum wlr_xdg_toplevel_configure_field
 	bool maximized, fullscreen, resizing, activated;
 	uint32_t tiled; // enum wlr_edges
-	uint32_t width, height;
+	double width, height;
 	struct {
-		uint32_t width, height;
+		double width, height;
 	} bounds;
 	uint32_t wm_capabilities; // enum wlr_xdg_toplevel_wm_capabilities
 };
@@ -358,7 +358,7 @@ void wlr_xdg_surface_ping(struct wlr_xdg_surface *surface);
  * configure serial.
  */
 uint32_t wlr_xdg_toplevel_set_size(struct wlr_xdg_toplevel *toplevel,
-		uint32_t width, uint32_t height);
+		double width, double height);
 
 /**
  * Request that this toplevel show itself in an activated or deactivated

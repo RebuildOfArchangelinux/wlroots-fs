@@ -18,12 +18,12 @@
 #include <xcb/xfixes.h>
 #include "xwayland/xwm.h"
 
-static int32_t scale(struct wlr_xwm *xwm, uint32_t val) {
-	return val * xwm->scale;
+static int32_t scale(struct wlr_xwm *xwm, double val) {
+	return round(val * xwm->scale);
 }
 
-static int32_t unscale(struct wlr_xwm *xwm, uint32_t val) {
-	return (val + xwm->scale/2) / xwm->scale;
+static double unscale(struct wlr_xwm *xwm, double val) {
+	return val / xwm->scale;
 }
 
 const char *const atom_map[ATOM_LAST] = {
@@ -139,8 +139,8 @@ static int xwayland_surface_handle_ping_timeout(void *data) {
 }
 
 static struct wlr_xwayland_surface *xwayland_surface_create(
-		struct wlr_xwm *xwm, xcb_window_t window_id, int16_t x, int16_t y,
-		uint16_t width, uint16_t height, bool override_redirect) {
+		struct wlr_xwm *xwm, xcb_window_t window_id, double x, double y,
+		double width, double height, bool override_redirect) {
 	struct wlr_xwayland_surface *surface =
 		calloc(1, sizeof(struct wlr_xwayland_surface));
 	if (!surface) {
@@ -1125,7 +1125,7 @@ static void xwm_handle_property_notify(struct wlr_xwm *xwm,
 				return;
 			}
 			if (reply->type == XCB_ATOM_CARDINAL) {
-				xwm->scale = *(uint32_t*)xcb_get_property_value(reply);
+				xwm->scale = *(float*)xcb_get_property_value(reply);
 			}
 			free(reply);
 		}
@@ -1709,7 +1709,7 @@ void wlr_xwayland_surface_activate(struct wlr_xwayland_surface *xsurface,
 }
 
 void wlr_xwayland_surface_configure(struct wlr_xwayland_surface *xsurface,
-		int16_t x, int16_t y, uint16_t width, uint16_t height) {
+		double x, double y, double width, double height) {
 	struct wlr_xwm *xwm = xsurface->xwm;
 
 	xsurface->x = x;
@@ -2050,7 +2050,7 @@ struct wlr_xwm *xwm_create(struct wlr_xwayland *xwayland, int wm_fd) {
 	wl_list_init(&xwm->pending_startup_ids);
 	xwm->ping_timeout = 10000;
 
-	xwm->scale = 1;
+	xwm->scale = 1.;
 	xwm->xcb_conn = xcb_connect_to_fd(wm_fd, NULL);
 
 	int rc = xcb_connection_has_error(xwm->xcb_conn);
