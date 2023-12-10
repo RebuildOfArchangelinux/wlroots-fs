@@ -60,6 +60,10 @@ compositors = {
 		],
 		'dep': [math],
 	},
+	'explicit-sync': {
+		'src': 'explicit-sync.c',
+		'proto': ['xdg-shell'],
+	},
 }
 
 foreach name, info : compositors
