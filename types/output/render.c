@@ -341,6 +341,7 @@ uint32_t wlr_output_preferred_read_format(struct wlr_output *output) {
 	output_clear_back_buffer(output);
 
 	return fmt;
+	// return DRM_FORMAT_BGRA8888;
 }
 
 bool output_is_direct_scanout(struct wlr_output *output,

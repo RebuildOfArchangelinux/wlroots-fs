@@ -45,7 +45,7 @@ struct wlr_surface_state {
 	int32_t scale;
 	struct wl_list frame_callback_list; // wl_resource
 
-	int width, height; // in surface-local coordinates
+	double width, height; // in surface-local coordinates
 	int buffer_width, buffer_height;
 
 	struct wl_list subsurfaces_below;
