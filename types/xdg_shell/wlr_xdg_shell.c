@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include "types/wlr_xdg_shell.h"
 
-#define WM_BASE_VERSION 5
+#define WM_BASE_VERSION 6
 
 static const struct xdg_wm_base_interface xdg_shell_impl;
 
@@ -93,10 +93,8 @@ static int xdg_client_ping_timeout(void *user_data) {
 static void xdg_shell_bind(struct wl_client *wl_client, void *data,
 		uint32_t version, uint32_t id) {
 	struct wlr_xdg_shell *xdg_shell = data;
-	assert(wl_client && xdg_shell);
 
-	struct wlr_xdg_client *client =
-		calloc(1, sizeof(struct wlr_xdg_client));
+	struct wlr_xdg_client *client = calloc(1, sizeof(*client));
 	if (client == NULL) {
 		wl_client_post_no_memory(wl_client);
 		return;
@@ -140,8 +138,7 @@ struct wlr_xdg_shell *wlr_xdg_shell_create(struct wl_display *display,
 		uint32_t version) {
 	assert(version <= WM_BASE_VERSION);
 
-	struct wlr_xdg_shell *xdg_shell =
-		calloc(1, sizeof(struct wlr_xdg_shell));
+	struct wlr_xdg_shell *xdg_shell = calloc(1, sizeof(*xdg_shell));
 	if (!xdg_shell) {
 		return NULL;
 	}
@@ -161,6 +158,8 @@ struct wlr_xdg_shell *wlr_xdg_shell_create(struct wl_display *display,
 	xdg_shell->global = global;
 
 	wl_signal_init(&xdg_shell->events.new_surface);
+	wl_signal_init(&xdg_shell->events.new_toplevel);
+	wl_signal_init(&xdg_shell->events.new_popup);
 	wl_signal_init(&xdg_shell->events.destroy);
 
 	xdg_shell->display_destroy.notify = handle_display_destroy;

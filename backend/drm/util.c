@@ -3,7 +3,9 @@
 #include <drm_fourcc.h>
 #include <drm_mode.h>
 #include <drm.h>
-#include <libudev.h>
+#include <libdisplay-info/cvt.h>
+#include <libdisplay-info/edid.h>
+#include <libdisplay-info/info.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -49,39 +51,6 @@ enum wlr_output_mode_aspect_ratio get_picture_aspect_ratio(const drmModeModeInfo
 	}
 }
 
-static const char *get_manufacturer(struct udev_hwdb *hwdb, uint16_t code) {
-	static char pnp_id[4];
-
-	// The ASCII 3-letter manufacturer PnP ID is encoded in 5-bit codes
-	pnp_id[0] = ((code >> 10) & 0x1F) + '@';
-	pnp_id[1] = ((code >> 5) & 0x1F) + '@';
-	pnp_id[2] = ((code >> 0) & 0x1F) + '@';
-	pnp_id[3] = '\0';
-
-	if (hwdb == NULL) {
-		return pnp_id;
-	}
-
-	char query[32];
-	snprintf(query, sizeof(query), "acpi:%s:", pnp_id);
-	struct udev_list_entry *acpi_entry =
-		udev_hwdb_get_properties_list_entry(hwdb, query, 0);
-	if (acpi_entry == NULL) {
-		return pnp_id;
-	}
-
-	struct udev_list_entry *vendor_entry =
-		udev_list_entry_get_by_name(acpi_entry, "ID_VENDOR_FROM_DATABASE");
-	if (vendor_entry == NULL) {
-		return pnp_id;
-	}
-
-	return udev_list_entry_get_value(vendor_entry);
-}
-
-/* See https://en.wikipedia.org/wiki/Extended_Display_Identification_Data for layout of EDID data.
- * We don't parse the EDID properly. We just expect to receive valid data.
- */
 void parse_edid(struct wlr_drm_connector *conn, size_t len, const uint8_t *data) {
 	struct wlr_output *output = &conn->output;
 
@@ -92,52 +61,42 @@ void parse_edid(struct wlr_drm_connector *conn, size_t len, const uint8_t *data)
 	output->model = NULL;
 	output->serial = NULL;
 
-	if (!data || len < 128) {
+	struct di_info *info = di_info_parse_edid(data, len);
+	if (info == NULL) {
+		wlr_log(WLR_ERROR, "Failed to parse EDID");
 		return;
 	}
 
-	uint16_t id = (data[8] << 8) | data[9];
-	output->make = strdup(get_manufacturer(conn->backend->hwdb, id));
-
-	uint16_t model = data[10] | (data[11] << 8);
-	char model_str[32];
-	snprintf(model_str, sizeof(model_str), "0x%04" PRIX16, model);
-
-	uint32_t serial = data[12] | (data[13] << 8) | (data[14] << 8) | (data[15] << 8);
-	char serial_str[32];
-	if (serial != 0) {
-		snprintf(serial_str, sizeof(serial_str), "0x%08" PRIX32, serial);
-	} else {
-		serial_str[0] = '\0';
+	const struct di_edid *edid = di_info_get_edid(info);
+	const struct di_edid_vendor_product *vendor_product = di_edid_get_vendor_product(edid);
+	char pnp_id[] = {
+		vendor_product->manufacturer[0],
+		vendor_product->manufacturer[1],
+		vendor_product->manufacturer[2],
+		'\0',
+	};
+	const char *manu = get_pnp_manufacturer(vendor_product->manufacturer);
+	if (!manu) {
+		manu = pnp_id;
 	}
+	output->make = strdup(manu);
 
-	for (size_t i = 72; i <= 108; i += 18) {
-		uint16_t flag = (data[i] << 8) | data[i + 1];
-		if (flag == 0 && data[i + 3] == 0xFC) {
-			snprintf(model_str, sizeof(model_str), "%.13s", &data[i + 5]);
+	output->model = di_info_get_model(info);
+	output->serial = di_info_get_serial(info);
 
-			// Monitor names are terminated by newline if they're too short
-			char *nl = strchr(model_str, '\n');
-			if (nl) {
-				*nl = '\0';
-			}
-		} else if (flag == 0 && data[i + 3] == 0xFF) {
-			snprintf(serial_str, sizeof(serial_str), "%.13s", &data[i + 5]);
+	di_info_destroy(info);
+}
 
-			// Monitor serial numbers are terminated by newline if they're too
-			// short
-			char* nl = strchr(serial_str, '\n');
-
-			if (nl) {
-				*nl = '\0';
-			}
-		}
+const char *drm_connector_status_str(drmModeConnection status) {
+	switch (status) {
+	case DRM_MODE_CONNECTED:
+		return "connected";
+	case DRM_MODE_DISCONNECTED:
+		return "disconnected";
+	case DRM_MODE_UNKNOWNCONNECTION:
+		return "unknown";
 	}
-
-	output->model = strdup(model_str);
-	if (serial_str[0] != '\0') {
-		output->serial = strdup(serial_str);
-	}
+	return "<unsupported>";
 }
 
 static bool is_taken(size_t n, const uint32_t arr[static n], uint32_t key) {
@@ -284,4 +243,38 @@ size_t match_obj(size_t num_objs, const uint32_t objs[static restrict num_objs],
 
 	match_obj_(&st, 0, 0, 0, 0);
 	return st.score;
+}
+
+void generate_cvt_mode(drmModeModeInfo *mode, int hdisplay, int vdisplay,
+		float vrefresh) {
+	// TODO: depending on capabilities advertised in the EDID, use reduced
+	// blanking if possible (and update sync polarity)
+	struct di_cvt_options options = {
+		.red_blank_ver = DI_CVT_REDUCED_BLANKING_NONE,
+		.h_pixels = hdisplay,
+		.v_lines = vdisplay,
+		.ip_freq_rqd = vrefresh ? vrefresh : 60,
+	};
+	struct di_cvt_timing timing;
+	di_cvt_compute(&timing, &options);
+
+	uint16_t hsync_start = hdisplay + timing.h_front_porch;
+	uint16_t vsync_start = timing.v_lines_rnd + timing.v_front_porch;
+	uint16_t hsync_end = hsync_start + timing.h_sync;
+	uint16_t vsync_end = vsync_start + timing.v_sync;
+
+	*mode = (drmModeModeInfo){
+		.clock = roundf(timing.act_pixel_freq * 1000),
+		.hdisplay = hdisplay,
+		.vdisplay = timing.v_lines_rnd,
+		.hsync_start = hsync_start,
+		.vsync_start = vsync_start,
+		.hsync_end = hsync_end,
+		.vsync_end = vsync_end,
+		.htotal = hsync_end + timing.h_back_porch,
+		.vtotal = vsync_end + timing.v_back_porch,
+		.vrefresh = roundf(timing.act_frame_rate),
+		.flags = DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC,
+	};
+	snprintf(mode->name, sizeof(mode->name), "%dx%d", hdisplay, vdisplay);
 }

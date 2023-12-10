@@ -8,8 +8,10 @@ features += { 'gles2-renderer': true }
 wlr_deps += glesv2
 
 wlr_files += files(
+	'pass.c',
 	'pixel_format.c',
 	'renderer.c',
-	'shaders.c',
 	'texture.c',
 )
+
+subdir('shaders')

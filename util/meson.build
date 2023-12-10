@@ -5,10 +5,12 @@ wlr_files += files(
 	'env.c',
 	'global.c',
 	'log.c',
+	'rect_union.c',
 	'region.c',
 	'set.c',
 	'shm.c',
 	'time.c',
 	'token.c',
+	'transform.c',
+	'utf8.c',
 )
-

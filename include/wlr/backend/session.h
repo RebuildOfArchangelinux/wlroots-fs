@@ -1,7 +1,6 @@
 #ifndef WLR_BACKEND_SESSION_H
 #define WLR_BACKEND_SESSION_H
 
-#include <libudev.h>
 #include <stdbool.h>
 #include <sys/types.h>
 #include <wayland-server-core.h>
@@ -43,8 +42,8 @@ struct wlr_session {
 
 	struct wl_list devices;
 
-	struct wl_display *display;
-	struct wl_listener display_destroy;
+	struct wl_event_loop *event_loop;
+	struct wl_listener event_loop_destroy;
 
 	struct {
 		struct wl_signal active;
@@ -81,7 +80,7 @@ struct wlr_device_change_event {
  *
  * Returns NULL on error.
  */
-struct wlr_session *wlr_session_create(struct wl_display *disp);
+struct wlr_session *wlr_session_create(struct wl_event_loop *loop);
 
 /*
  * Closes a previously opened session and restores the virtual terminal.

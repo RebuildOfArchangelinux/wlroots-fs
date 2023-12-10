@@ -39,6 +39,7 @@ static void layer_surface_exclusive_zone(
 		struct wlr_layer_surface_v1_state *state,
 		struct wlr_box *usable_area) {
 	switch (state->anchor) {
+	case ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP:
 	case (ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP |
 			ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT |
 			ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT):
@@ -46,12 +47,14 @@ static void layer_surface_exclusive_zone(
 		usable_area->y += state->exclusive_zone + state->margin.top;
 		usable_area->height -= state->exclusive_zone + state->margin.top;
 		break;
+	case ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM:
 	case (ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM |
 			ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT |
 			ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT):
 		// Anchor bottom
 		usable_area->height -= state->exclusive_zone + state->margin.bottom;
 		break;
+	case ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT:
 	case (ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP |
 			ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM |
 			ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT):
@@ -59,9 +62,10 @@ static void layer_surface_exclusive_zone(
 		usable_area->x += state->exclusive_zone + state->margin.left;
 		usable_area->width -= state->exclusive_zone + state->margin.left;
 		break;
+	case ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT:
 	case (ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP |
 			ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM |
-			ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT): // Anchor right
+			ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT):
 		// Anchor right
 		usable_area->width -= state->exclusive_zone + state->margin.right;
 		break;
@@ -125,7 +129,7 @@ void wlr_scene_layer_surface_v1_configure(
 	wlr_scene_node_set_position(&scene_layer_surface->tree->node, box.x, box.y);
 	wlr_layer_surface_v1_configure(layer_surface, box.width, box.height);
 
-	if (layer_surface->mapped && state->exclusive_zone > 0) {
+	if (layer_surface->surface->mapped && state->exclusive_zone > 0) {
 		layer_surface_exclusive_zone(state, usable_area);
 	}
 }
@@ -167,16 +171,16 @@ struct wlr_scene_layer_surface_v1 *wlr_scene_layer_surface_v1_create(
 
 	scene_layer_surface->layer_surface_map.notify =
 		scene_layer_surface_handle_layer_surface_map;
-	wl_signal_add(&layer_surface->events.map,
+	wl_signal_add(&layer_surface->surface->events.map,
 		&scene_layer_surface->layer_surface_map);
 
 	scene_layer_surface->layer_surface_unmap.notify =
 		scene_layer_surface_handle_layer_surface_unmap;
-	wl_signal_add(&layer_surface->events.unmap,
+	wl_signal_add(&layer_surface->surface->events.unmap,
 		&scene_layer_surface->layer_surface_unmap);
 
 	wlr_scene_node_set_enabled(&scene_layer_surface->tree->node,
-		layer_surface->mapped);
+		layer_surface->surface->mapped);
 
 	return scene_layer_surface;
 }

@@ -54,7 +54,7 @@ uint32_t wlr_xdg_toplevel_decoration_v1_set_mode(
 		enum wlr_xdg_toplevel_decoration_v1_mode mode) {
 	assert(mode != WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_NONE);
 	decoration->scheduled_mode = mode;
-	return wlr_xdg_surface_schedule_configure(decoration->surface);
+	return wlr_xdg_surface_schedule_configure(decoration->toplevel->base);
 }
 
 static void toplevel_decoration_handle_resource_destroy(
@@ -63,7 +63,7 @@ static void toplevel_decoration_handle_resource_destroy(
 		toplevel_decoration_from_resource(resource);
 	wl_signal_emit_mutable(&decoration->events.destroy, decoration);
 	wl_list_remove(&decoration->surface_commit.link);
-	wl_list_remove(&decoration->surface_destroy.link);
+	wl_list_remove(&decoration->toplevel_destroy.link);
 	wl_list_remove(&decoration->surface_configure.link);
 	wl_list_remove(&decoration->surface_ack_configure.link);
 	struct wlr_xdg_toplevel_decoration_v1_configure *configure, *tmp;
@@ -74,10 +74,15 @@ static void toplevel_decoration_handle_resource_destroy(
 	free(decoration);
 }
 
-static void toplevel_decoration_handle_surface_destroy(
+static void toplevel_decoration_handle_toplevel_destroy(
 		struct wl_listener *listener, void *data) {
 	struct wlr_xdg_toplevel_decoration_v1 *decoration =
-		wl_container_of(listener, decoration, surface_destroy);
+		wl_container_of(listener, decoration, toplevel_destroy);
+
+	wl_resource_post_error(decoration->resource,
+		ZXDG_TOPLEVEL_DECORATION_V1_ERROR_ORPHANED,
+		"xdg_toplevel destroyed before xdg_toplevel_decoration");
+
 	wl_resource_destroy(decoration->resource);
 }
 
@@ -91,8 +96,7 @@ static void toplevel_decoration_handle_surface_configure(
 		return;
 	}
 
-	struct wlr_xdg_toplevel_decoration_v1_configure *configure =
-		calloc(1, sizeof(struct wlr_xdg_toplevel_decoration_v1_configure));
+	struct wlr_xdg_toplevel_decoration_v1_configure *configure = calloc(1, sizeof(*configure));
 	if (configure == NULL) {
 		return;
 	}
@@ -141,15 +145,8 @@ static void toplevel_decoration_handle_surface_commit(
 		struct wl_listener *listener, void *data) {
 	struct wlr_xdg_toplevel_decoration_v1 *decoration =
 		wl_container_of(listener, decoration, surface_commit);
-	struct wlr_xdg_decoration_manager_v1 *manager = decoration->manager;
 
 	decoration->current = decoration->pending;
-
-	if (decoration->surface->added && !decoration->added) {
-		decoration->added = true;
-		wl_signal_emit_mutable(&manager->events.new_toplevel_decoration,
-			decoration);
-	}
 }
 
 static const struct zxdg_decoration_manager_v1_interface decoration_manager_impl;
@@ -182,14 +179,23 @@ static void decoration_manager_handle_get_toplevel_decoration(
 		return;
 	}
 
-	struct wlr_xdg_toplevel_decoration_v1 *decoration =
-		calloc(1, sizeof(struct wlr_xdg_toplevel_decoration_v1));
+	struct wlr_xdg_toplevel_decoration_v1 *existing;
+	wl_list_for_each(existing, &manager->decorations, link) {
+		if (existing->toplevel == toplevel) {
+			wl_resource_post_error(manager_resource,
+				ZXDG_TOPLEVEL_DECORATION_V1_ERROR_ALREADY_CONSTRUCTED,
+				"xdg_toplevel already has a decoration object");
+			return;
+		}
+	}
+
+	struct wlr_xdg_toplevel_decoration_v1 *decoration = calloc(1, sizeof(*decoration));
 	if (decoration == NULL) {
 		wl_client_post_no_memory(client);
 		return;
 	}
 	decoration->manager = manager;
-	decoration->surface = toplevel->base;
+	decoration->toplevel = toplevel;
 
 	uint32_t version = wl_resource_get_version(manager_resource);
 	decoration->resource = wl_resource_create(client,
@@ -210,30 +216,18 @@ static void decoration_manager_handle_get_toplevel_decoration(
 	wl_signal_init(&decoration->events.destroy);
 	wl_signal_init(&decoration->events.request_mode);
 
-	wl_signal_add(&toplevel->base->events.destroy,
-		&decoration->surface_destroy);
-	decoration->surface_destroy.notify =
-		toplevel_decoration_handle_surface_destroy;
-	wl_signal_add(&toplevel->base->events.configure,
-		&decoration->surface_configure);
-	decoration->surface_configure.notify =
-		toplevel_decoration_handle_surface_configure;
-	wl_signal_add(&toplevel->base->events.ack_configure,
-		&decoration->surface_ack_configure);
-	decoration->surface_ack_configure.notify =
-		toplevel_decoration_handle_surface_ack_configure;
-	wl_signal_add(&toplevel->base->surface->events.commit,
-		&decoration->surface_commit);
-	decoration->surface_commit.notify =
-		toplevel_decoration_handle_surface_commit;
+	wl_signal_add(&toplevel->events.destroy, &decoration->toplevel_destroy);
+	decoration->toplevel_destroy.notify = toplevel_decoration_handle_toplevel_destroy;
+	wl_signal_add(&toplevel->base->events.configure, &decoration->surface_configure);
+	decoration->surface_configure.notify = toplevel_decoration_handle_surface_configure;
+	wl_signal_add(&toplevel->base->events.ack_configure, &decoration->surface_ack_configure);
+	decoration->surface_ack_configure.notify = toplevel_decoration_handle_surface_ack_configure;
+	wl_signal_add(&toplevel->base->surface->events.commit, &decoration->surface_commit);
+	decoration->surface_commit.notify = toplevel_decoration_handle_surface_commit;
 
 	wl_list_insert(&manager->decorations, &decoration->link);
 
-	if (toplevel->base->added) {
-		decoration->added = true;
-		wl_signal_emit_mutable(&manager->events.new_toplevel_decoration,
-			decoration);
-	}
+	wl_signal_emit_mutable(&manager->events.new_toplevel_decoration, decoration);
 }
 
 static const struct zxdg_decoration_manager_v1_interface
@@ -267,8 +261,7 @@ static void handle_display_destroy(struct wl_listener *listener, void *data) {
 
 struct wlr_xdg_decoration_manager_v1 *
 		wlr_xdg_decoration_manager_v1_create(struct wl_display *display) {
-	struct wlr_xdg_decoration_manager_v1 *manager =
-		calloc(1, sizeof(struct wlr_xdg_decoration_manager_v1));
+	struct wlr_xdg_decoration_manager_v1 *manager = calloc(1, sizeof(*manager));
 	if (manager == NULL) {
 		return NULL;
 	}

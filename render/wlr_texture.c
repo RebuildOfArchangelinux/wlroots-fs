@@ -1,17 +1,23 @@
 #include <assert.h>
+#include <drm_fourcc.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <wlr/render/interface.h>
 #include <wlr/render/wlr_texture.h>
+#include "render/pixel_format.h"
 #include "types/wlr_buffer.h"
 
-void wlr_texture_init(struct wlr_texture *texture,
+void wlr_texture_init(struct wlr_texture *texture, struct wlr_renderer *renderer,
 		const struct wlr_texture_impl *impl, uint32_t width, uint32_t height) {
-	memset(texture, 0, sizeof(*texture));
-	texture->impl = impl;
-	texture->width = width;
-	texture->height = height;
+	assert(renderer);
+
+	*texture = (struct wlr_texture){
+		.renderer = renderer,
+		.impl = impl,
+		.width = width,
+		.height = height,
+	};
 }
 
 void wlr_texture_destroy(struct wlr_texture *texture) {
@@ -20,6 +26,48 @@ void wlr_texture_destroy(struct wlr_texture *texture) {
 	} else {
 		free(texture);
 	}
+}
+
+void wlr_texture_read_pixels_options_get_src_box(
+		const struct wlr_texture_read_pixels_options *options,
+		const struct wlr_texture *texture, struct wlr_box *box) {
+	if (wlr_box_empty(&options->src_box)) {
+		*box = (struct wlr_box){
+			.x = 0,
+			.y = 0,
+			.width = texture->width,
+			.height = texture->height,
+		};
+		return;
+	}
+
+	*box = options->src_box;
+}
+
+void *wlr_texture_read_pixel_options_get_data(
+		const struct wlr_texture_read_pixels_options *options) {
+	const struct wlr_pixel_format_info *fmt = drm_get_pixel_format_info(options->format);
+
+	return (char *)options->data +
+		pixel_format_info_min_stride(fmt, options->dst_x) +
+		options->dst_y * options->stride;
+}
+
+bool wlr_texture_read_pixels(struct wlr_texture *texture,
+		const struct wlr_texture_read_pixels_options *options) {
+	if (!texture->impl->read_pixels) {
+		return false;
+	}
+
+	return texture->impl->read_pixels(texture, options);
+}
+
+uint32_t wlr_texture_preferred_read_format(struct wlr_texture *texture) {
+	if (!texture->impl->preferred_read_format) {
+		return DRM_FORMAT_INVALID;
+	}
+
+	return texture->impl->preferred_read_format(texture);
 }
 
 struct wlr_texture *wlr_texture_from_pixels(struct wlr_renderer *renderer,
@@ -72,7 +120,7 @@ struct wlr_texture *wlr_texture_from_buffer(struct wlr_renderer *renderer,
 }
 
 bool wlr_texture_update_from_buffer(struct wlr_texture *texture,
-		struct wlr_buffer *buffer, pixman_region32_t *damage) {
+		struct wlr_buffer *buffer, const pixman_region32_t *damage) {
 	if (!texture->impl->update_from_buffer) {
 		return false;
 	}

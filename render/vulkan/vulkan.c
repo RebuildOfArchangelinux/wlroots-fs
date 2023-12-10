@@ -1,4 +1,8 @@
+#if !defined(__FreeBSD__)
+#define _POSIX_C_SOURCE 200809L
+#endif
 #include <assert.h>
+#include <fcntl.h>
 #include <math.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -10,27 +14,21 @@
 #include <wlr/util/log.h>
 #include <wlr/version.h>
 #include <wlr/config.h>
+#include "render/dmabuf.h"
 #include "render/vulkan.h"
 
-// Returns the name of the first extension that could not be found or NULL.
-static const char *find_extensions(const VkExtensionProperties *avail,
-		unsigned availc, const char **req, unsigned reqc) {
-	// check if all required extensions are supported
-	for (size_t i = 0; i < reqc; ++i) {
-		bool found = false;
-		for (size_t j = 0; j < availc; ++j) {
-			if (!strcmp(avail[j].extensionName, req[i])) {
-				found = true;
-				break;
-			}
-		}
+#if defined(__linux__)
+#include <sys/sysmacros.h>
+#endif
 
-		if (!found) {
-			return req[i];
+static bool check_extension(const VkExtensionProperties *avail,
+		uint32_t avail_len, const char *name) {
+	for (size_t i = 0; i < avail_len; i++) {
+		if (strcmp(avail[i].extensionName, name) == 0) {
+			return true;
 		}
 	}
-
-	return NULL;
+	return false;
 }
 
 static VkBool32 debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
@@ -82,10 +80,7 @@ static VkBool32 debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
 	return false;
 }
 
-
-// instance
-struct wlr_vk_instance *vulkan_instance_create(size_t ext_count,
-		const char **exts, bool debug) {
+struct wlr_vk_instance *vulkan_instance_create(bool debug) {
 	// we require vulkan 1.1
 	PFN_vkEnumerateInstanceVersion pfEnumInstanceVersion =
 		(PFN_vkEnumerateInstanceVersion)
@@ -102,7 +97,6 @@ struct wlr_vk_instance *vulkan_instance_create(size_t ext_count,
 		return NULL;
 	}
 
-	// query extension support
 	uint32_t avail_extc = 0;
 	VkResult res;
 	res = vkEnumerateInstanceExtensionProperties(NULL, &avail_extc, NULL);
@@ -124,7 +118,6 @@ struct wlr_vk_instance *vulkan_instance_create(size_t ext_count,
 			avail_ext_props[j].extensionName, avail_ext_props[j].specVersion);
 	}
 
-	// create instance
 	struct wlr_vk_instance *ini = calloc(1, sizeof(*ini));
 	if (!ini) {
 		wlr_log_errno(WLR_ERROR, "allocation failed");
@@ -132,53 +125,32 @@ struct wlr_vk_instance *vulkan_instance_create(size_t ext_count,
 	}
 
 	size_t extensions_len = 0;
-	const char **extensions = calloc(1 + ext_count, sizeof(*extensions));
-	if (!extensions) {
-		wlr_log_errno(WLR_ERROR, "allocation failed");
-		goto error;
-	}
-
-	// find extensions
-	for (unsigned i = 0; i < ext_count; ++i) {
-		if (find_extensions(avail_ext_props, avail_extc, &exts[i], 1)) {
-			wlr_log(WLR_DEBUG, "vulkan instance extension %s not found",
-				exts[i]);
-			continue;
-		}
-
-		extensions[extensions_len++] = exts[i];
-	}
+	const char *extensions[1] = {0};
 
 	bool debug_utils_found = false;
-	if (debug) {
-		const char *name = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
-		if (find_extensions(avail_ext_props, avail_extc, &name, 1) == NULL) {
-			debug_utils_found = true;
-			extensions[extensions_len++] = name;
-		}
+	if (debug && check_extension(avail_ext_props, avail_extc,
+			VK_EXT_DEBUG_UTILS_EXTENSION_NAME)) {
+		debug_utils_found = true;
+		extensions[extensions_len++] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
 	}
 
-	VkApplicationInfo application_info = {0};
-	application_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-	application_info.pEngineName = "wlroots";
-	application_info.engineVersion = WLR_VERSION_NUM;
-	application_info.apiVersion = VK_API_VERSION_1_1;
+	assert(extensions_len <= sizeof(extensions) / sizeof(extensions[0]));
 
-	const char *layers[] = {
-		"VK_LAYER_KHRONOS_validation",
-		// "VK_LAYER_RENDERDOC_Capture",
-		// "VK_LAYER_live_introspection",
+	VkApplicationInfo application_info = {
+		.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+		.pEngineName = "wlroots",
+		.engineVersion = WLR_VERSION_NUM,
+		.apiVersion = VK_API_VERSION_1_1,
 	};
 
-	unsigned layer_count = debug * (sizeof(layers) / sizeof(layers[0]));
-
-	VkInstanceCreateInfo instance_info = {0};
-	instance_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-	instance_info.pApplicationInfo = &application_info;
-	instance_info.enabledExtensionCount = extensions_len;
-	instance_info.ppEnabledExtensionNames = extensions;
-	instance_info.enabledLayerCount = layer_count;
-	instance_info.ppEnabledLayerNames = layers;
+	VkInstanceCreateInfo instance_info = {
+		.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+		.pApplicationInfo = &application_info,
+		.enabledExtensionCount = extensions_len,
+		.ppEnabledExtensionNames = extensions,
+		.enabledLayerCount = 0,
+		.ppEnabledLayerNames = NULL,
+	};
 
 	VkDebugUtilsMessageSeverityFlagsEXT severity =
 		// VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
@@ -189,12 +161,13 @@ struct wlr_vk_instance *vulkan_instance_create(size_t ext_count,
 		VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
 		VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
 
-	VkDebugUtilsMessengerCreateInfoEXT debug_info = {0};
-	debug_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-	debug_info.messageSeverity = severity;
-	debug_info.messageType = types;
-	debug_info.pfnUserCallback = &debug_callback;
-	debug_info.pUserData = ini;
+	VkDebugUtilsMessengerCreateInfoEXT debug_info = {
+		.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+		.messageSeverity = severity,
+		.messageType = types,
+		.pfnUserCallback = &debug_callback,
+		.pUserData = ini,
+	};
 
 	if (debug_utils_found) {
 		// already adding the debug utils messenger extension to
@@ -210,9 +183,6 @@ struct wlr_vk_instance *vulkan_instance_create(size_t ext_count,
 		goto error;
 	}
 
-	free(extensions);
-
-	// debug callback
 	if (debug_utils_found) {
 		ini->api.createDebugUtilsMessengerEXT =
 			(PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(
@@ -253,7 +223,6 @@ void vulkan_instance_destroy(struct wlr_vk_instance *ini) {
 	free(ini);
 }
 
-// physical device matching
 static void log_phdev(const VkPhysicalDeviceProperties *props) {
 	uint32_t vv_major = VK_VERSION_MAJOR(props->apiVersion);
 	uint32_t vv_minor = VK_VERSION_MINOR(props->apiVersion);
@@ -344,23 +313,26 @@ VkPhysicalDevice vulkan_find_drm_phdev(struct wlr_vk_instance *ini, int drm_fd) 
 			continue;
 		}
 
-		const char *name = VK_EXT_PHYSICAL_DEVICE_DRM_EXTENSION_NAME;
-		bool has_drm_props = find_extensions(avail_ext_props, avail_extc, &name, 1) == NULL;
-		name = VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME;
-		bool has_driver_props = find_extensions(avail_ext_props, avail_extc, &name, 1) == NULL;
+		bool has_drm_props = check_extension(avail_ext_props, avail_extc,
+			VK_EXT_PHYSICAL_DEVICE_DRM_EXTENSION_NAME);
+		bool has_driver_props = check_extension(avail_ext_props, avail_extc,
+			VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME);
 
-		VkPhysicalDeviceProperties2 props = {0};
-		props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+		VkPhysicalDeviceProperties2 props = {
+			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+		};
 
-		VkPhysicalDeviceDrmPropertiesEXT drm_props = {0};
-		drm_props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRM_PROPERTIES_EXT;
+		VkPhysicalDeviceDrmPropertiesEXT drm_props = {
+			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRM_PROPERTIES_EXT,
+		};
 		if (has_drm_props) {
 			drm_props.pNext = props.pNext;
 			props.pNext = &drm_props;
 		}
 
-		VkPhysicalDeviceDriverPropertiesKHR driver_props = {0};
-		driver_props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES;
+		VkPhysicalDeviceDriverPropertiesKHR driver_props = {
+			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES,
+		};
 		if (has_driver_props) {
 			driver_props.pNext = props.pNext;
 			props.pNext = &driver_props;
@@ -392,11 +364,65 @@ VkPhysicalDevice vulkan_find_drm_phdev(struct wlr_vk_instance *ini, int drm_fd) 
 	return VK_NULL_HANDLE;
 }
 
+int vulkan_open_phdev_drm_fd(VkPhysicalDevice phdev) {
+	// vulkan_find_drm_phdev() already checks that VK_EXT_physical_device_drm
+	// is supported
+	VkPhysicalDeviceDrmPropertiesEXT drm_props = {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRM_PROPERTIES_EXT,
+	};
+	VkPhysicalDeviceProperties2 props = {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+		.pNext = &drm_props,
+	};
+	vkGetPhysicalDeviceProperties2(phdev, &props);
+
+	dev_t devid;
+	if (drm_props.hasRender) {
+		devid = makedev(drm_props.renderMajor, drm_props.renderMinor);
+	} else if (drm_props.hasPrimary) {
+		devid = makedev(drm_props.primaryMajor, drm_props.primaryMinor);
+	} else {
+		wlr_log(WLR_ERROR, "Physical device is missing both render and primary nodes");
+		return -1;
+	}
+
+	drmDevice *device = NULL;
+	if (drmGetDeviceFromDevId(devid, 0, &device) != 0) {
+		wlr_log_errno(WLR_ERROR, "drmGetDeviceFromDevId failed");
+		return -1;
+	}
+
+	const char *name = NULL;
+	if (device->available_nodes & (1 << DRM_NODE_RENDER)) {
+		name = device->nodes[DRM_NODE_RENDER];
+	} else {
+		assert(device->available_nodes & (1 << DRM_NODE_PRIMARY));
+		name = device->nodes[DRM_NODE_PRIMARY];
+		wlr_log(WLR_DEBUG, "DRM device %s has no render node, "
+			"falling back to primary node", name);
+	}
+
+	int drm_fd = open(name, O_RDWR | O_NONBLOCK | O_CLOEXEC);
+	if (drm_fd < 0) {
+		wlr_log_errno(WLR_ERROR, "Failed to open DRM node %s", name);
+	}
+	drmFreeDevice(&device);
+	return drm_fd;
+}
+
+static void load_device_proc(struct wlr_vk_device *dev, const char *name,
+		void *proc_ptr) {
+	void *proc = (void *)vkGetDeviceProcAddr(dev->dev, name);
+	if (proc == NULL) {
+		abort();
+	}
+	*(void **)proc_ptr = proc;
+}
+
 struct wlr_vk_device *vulkan_device_create(struct wlr_vk_instance *ini,
 		VkPhysicalDevice phdev) {
 	VkResult res;
 
-	// check for extensions
 	uint32_t avail_extc = 0;
 	res = vkEnumerateDeviceExtensionProperties(phdev, NULL,
 		&avail_extc, NULL);
@@ -418,7 +444,6 @@ struct wlr_vk_device *vulkan_device_create(struct wlr_vk_instance *ini,
 			avail_ext_props[j].extensionName, avail_ext_props[j].specVersion);
 	}
 
-	// create device
 	struct wlr_vk_device *dev = calloc(1, sizeof(*dev));
 	if (!dev) {
 		wlr_log_errno(WLR_ERROR, "allocation failed");
@@ -430,26 +455,29 @@ struct wlr_vk_device *vulkan_device_create(struct wlr_vk_instance *ini,
 	dev->drm_fd = -1;
 
 	// For dmabuf import we require at least the external_memory_fd,
-	// external_memory_dma_buf, queue_family_foreign and
-	// image_drm_format_modifier extensions.
-	const char *extensions[] = {
-		VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
-		VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME, // or vulkan 1.2
-		VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME,
-		VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME,
-		VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME,
-	};
-	size_t extensions_len = sizeof(extensions) / sizeof(extensions[0]);
+	// external_memory_dma_buf, queue_family_foreign,
+	// image_drm_format_modifier, and image_format_list extensions.
+	// The size is set to a large number to allow for other conditional
+	// extensions before the device is created
+	const char *extensions[32] = {0};
+	size_t extensions_len = 0;
+	extensions[extensions_len++] = VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME;
+	extensions[extensions_len++] = VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME;
+	extensions[extensions_len++] = VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME; // or vulkan 1.2
+	extensions[extensions_len++] = VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME;
+	extensions[extensions_len++] = VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME;
+	extensions[extensions_len++] = VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME;
+	extensions[extensions_len++] = VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME; // or vulkan 1.2
+	extensions[extensions_len++] = VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME; // or vulkan 1.3
 
-	const char *not_found =
-		find_extensions(avail_ext_props, avail_extc, extensions, extensions_len);
-	if (not_found) {
-		wlr_log(WLR_ERROR, "vulkan: required device extension %s not found",
-			not_found);
-		goto error;
+	for (size_t i = 0; i < extensions_len; i++) {
+		if (!check_extension(avail_ext_props, avail_extc, extensions[i])) {
+			wlr_log(WLR_ERROR, "vulkan: required device extension %s not found",
+				extensions[i]);
+			goto error;
+		}
 	}
 
-	// queue families
 	{
 		uint32_t qfam_count;
 		vkGetPhysicalDeviceQueueFamilyProperties(phdev, &qfam_count, NULL);
@@ -466,44 +494,133 @@ struct wlr_vk_device *vulkan_device_create(struct wlr_vk_instance *ini,
 				break;
 			}
 		}
-
 		assert(graphics_found);
 	}
 
-	const float prio = 1.f;
-	VkDeviceQueueCreateInfo qinfo = {};
-	qinfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-	qinfo.queueFamilyIndex = dev->queue_family;
-	qinfo.queueCount = 1;
-	qinfo.pQueuePriorities = &prio;
+	const VkPhysicalDeviceExternalSemaphoreInfo ext_semaphore_info = {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_SEMAPHORE_INFO,
+		.handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT,
+	};
+	VkExternalSemaphoreProperties ext_semaphore_props = {
+		.sType = VK_STRUCTURE_TYPE_EXTERNAL_SEMAPHORE_PROPERTIES,
+	};
+	vkGetPhysicalDeviceExternalSemaphoreProperties(phdev,
+		&ext_semaphore_info, &ext_semaphore_props);
+	bool exportable_semaphore = ext_semaphore_props.externalSemaphoreFeatures &
+		VK_EXTERNAL_SEMAPHORE_FEATURE_EXPORTABLE_BIT;
+	bool importable_semaphore = ext_semaphore_props.externalSemaphoreFeatures &
+		VK_EXTERNAL_SEMAPHORE_FEATURE_IMPORTABLE_BIT;
+	if (!exportable_semaphore) {
+		wlr_log(WLR_DEBUG, "VkSemaphore is not exportable to a sync_file");
+	}
+	if (!importable_semaphore) {
+		wlr_log(WLR_DEBUG, "VkSemaphore is not importable from a sync_file");
+	}
 
-	VkDeviceCreateInfo dev_info = {0};
-	dev_info.pNext = NULL;
-	dev_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-	dev_info.queueCreateInfoCount = 1u;
-	dev_info.pQueueCreateInfos = &qinfo;
-	dev_info.enabledExtensionCount = extensions_len;
-	dev_info.ppEnabledExtensionNames = extensions;
+	bool dmabuf_sync_file_import_export = dmabuf_check_sync_file_import_export();
+	if (!dmabuf_sync_file_import_export) {
+		wlr_log(WLR_DEBUG, "DMA-BUF sync_file import/export not supported");
+	}
+
+	dev->implicit_sync_interop =
+		exportable_semaphore && importable_semaphore && dmabuf_sync_file_import_export;
+	if (dev->implicit_sync_interop) {
+		wlr_log(WLR_DEBUG, "Implicit sync interop supported");
+	} else {
+		wlr_log(WLR_INFO, "Implicit sync interop not supported, "
+			"falling back to blocking");
+	}
+
+	VkPhysicalDeviceSamplerYcbcrConversionFeatures phdev_sampler_ycbcr_features = {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_YCBCR_CONVERSION_FEATURES,
+	};
+	VkPhysicalDeviceFeatures2 phdev_features = {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+		.pNext = &phdev_sampler_ycbcr_features,
+	};
+	vkGetPhysicalDeviceFeatures2(phdev, &phdev_features);
+
+	dev->sampler_ycbcr_conversion = phdev_sampler_ycbcr_features.samplerYcbcrConversion;
+	wlr_log(WLR_DEBUG, "Sampler YCbCr conversion %s",
+		dev->sampler_ycbcr_conversion ? "supported" : "not supported");
+
+	const float prio = 1.f;
+	VkDeviceQueueCreateInfo qinfo = {
+		.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+		.queueFamilyIndex = dev->queue_family,
+		.queueCount = 1,
+		.pQueuePriorities = &prio,
+	};
+
+	VkDeviceQueueGlobalPriorityCreateInfoKHR global_priority;
+	bool has_global_priority = check_extension(avail_ext_props, avail_extc,
+		VK_KHR_GLOBAL_PRIORITY_EXTENSION_NAME);
+	if (has_global_priority) {
+		// If global priorities are supported, request a high-priority context
+		global_priority = (VkDeviceQueueGlobalPriorityCreateInfoKHR){
+			.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO_KHR,
+			.globalPriority = VK_QUEUE_GLOBAL_PRIORITY_HIGH_KHR,
+		};
+		qinfo.pNext = &global_priority;
+		extensions[extensions_len++] = VK_KHR_GLOBAL_PRIORITY_EXTENSION_NAME;
+		wlr_log(WLR_DEBUG, "Requesting a high-priority device queue");
+	} else {
+		wlr_log(WLR_DEBUG, "Global priorities are not supported, "
+			"falling back to regular queue priority");
+	}
+
+	VkPhysicalDeviceSamplerYcbcrConversionFeatures sampler_ycbcr_features = {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_YCBCR_CONVERSION_FEATURES,
+		.samplerYcbcrConversion = dev->sampler_ycbcr_conversion,
+	};
+	VkPhysicalDeviceSynchronization2FeaturesKHR sync2_features = {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR,
+		.pNext = &sampler_ycbcr_features,
+		.synchronization2 = VK_TRUE,
+	};
+	VkPhysicalDeviceTimelineSemaphoreFeaturesKHR timeline_features = {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES_KHR,
+		.pNext = &sync2_features,
+		.timelineSemaphore = VK_TRUE,
+	};
+	VkDeviceCreateInfo dev_info = {
+		.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+		.pNext = &timeline_features,
+		.queueCreateInfoCount = 1u,
+		.pQueueCreateInfos = &qinfo,
+		.enabledExtensionCount = extensions_len,
+		.ppEnabledExtensionNames = extensions,
+	};
+
+	assert(extensions_len < sizeof(extensions) / sizeof(extensions[0]));
 
 	res = vkCreateDevice(phdev, &dev_info, NULL, &dev->dev);
+
+	if (has_global_priority && (res == VK_ERROR_NOT_PERMITTED_EXT ||
+			res == VK_ERROR_INITIALIZATION_FAILED)) {
+		// Try to recover from the driver denying a global priority queue
+		wlr_log(WLR_DEBUG, "Failed to obtain a high-priority device queue, "
+			"falling back to regular queue priority");
+		qinfo.pNext = NULL;
+		res = vkCreateDevice(phdev, &dev_info, NULL, &dev->dev);
+	}
+
 	if (res != VK_SUCCESS) {
 		wlr_vk_error("Failed to create vulkan device", res);
 		goto error;
 	}
 
-
 	vkGetDeviceQueue(dev->dev, dev->queue_family, 0, &dev->queue);
 
-	// load api
-	dev->api.getMemoryFdPropertiesKHR = (PFN_vkGetMemoryFdPropertiesKHR)
-		vkGetDeviceProcAddr(dev->dev, "vkGetMemoryFdPropertiesKHR");
+	load_device_proc(dev, "vkGetMemoryFdPropertiesKHR",
+		&dev->api.vkGetMemoryFdPropertiesKHR);
+	load_device_proc(dev, "vkWaitSemaphoresKHR", &dev->api.vkWaitSemaphoresKHR);
+	load_device_proc(dev, "vkGetSemaphoreCounterValueKHR",
+		&dev->api.vkGetSemaphoreCounterValueKHR);
+	load_device_proc(dev, "vkGetSemaphoreFdKHR", &dev->api.vkGetSemaphoreFdKHR);
+	load_device_proc(dev, "vkImportSemaphoreFdKHR", &dev->api.vkImportSemaphoreFdKHR);
+	load_device_proc(dev, "vkQueueSubmit2KHR", &dev->api.vkQueueSubmit2KHR);
 
-	if (!dev->api.getMemoryFdPropertiesKHR) {
-		wlr_log(WLR_ERROR, "Failed to retrieve required dev function pointers");
-		goto error;
-	}
-
-	// - check device format support -
 	size_t max_fmts;
 	const struct wlr_vk_format *fmts = vulkan_get_format_list(&max_fmts);
 	dev->shm_formats = calloc(max_fmts, sizeof(*dev->shm_formats));

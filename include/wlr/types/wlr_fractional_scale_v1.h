@@ -20,15 +20,15 @@ struct wlr_fractional_scale_manager_v1 {
 		struct wl_signal destroy;
 	} events;
 
-	struct wl_listener display_destroy;
+	// private state
 
-	double default_scale;
+	struct wl_listener display_destroy;
 };
 
 void wlr_fractional_scale_v1_notify_scale(
 		struct wlr_surface *surface, double scale);
 
 struct wlr_fractional_scale_manager_v1 *wlr_fractional_scale_manager_v1_create(
-		struct wl_display *display);
+		struct wl_display *display, uint32_t version);
 
 #endif

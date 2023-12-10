@@ -17,7 +17,7 @@ struct wlr_xdg_decoration_manager_v1 {
 	struct wl_listener display_destroy;
 
 	struct {
-		struct wl_signal new_toplevel_decoration; // struct wlr_xdg_toplevel_decoration *
+		struct wl_signal new_toplevel_decoration; // struct wlr_xdg_toplevel_decoration
 		struct wl_signal destroy;
 	} events;
 
@@ -36,7 +36,7 @@ struct wlr_xdg_toplevel_decoration_v1_state {
 
 struct wlr_xdg_toplevel_decoration_v1 {
 	struct wl_resource *resource;
-	struct wlr_xdg_surface *surface;
+	struct wlr_xdg_toplevel * toplevel;
 	struct wlr_xdg_decoration_manager_v1 *manager;
 	struct wl_list link; // wlr_xdg_decoration_manager_v1.link
 
@@ -45,8 +45,6 @@ struct wlr_xdg_toplevel_decoration_v1 {
 	enum wlr_xdg_toplevel_decoration_v1_mode scheduled_mode;
 	enum wlr_xdg_toplevel_decoration_v1_mode requested_mode;
 
-	bool added;
-
 	struct wl_list configure_list; // wlr_xdg_toplevel_decoration_v1_configure.link
 
 	struct {
@@ -54,7 +52,7 @@ struct wlr_xdg_toplevel_decoration_v1 {
 		struct wl_signal request_mode;
 	} events;
 
-	struct wl_listener surface_destroy;
+	struct wl_listener toplevel_destroy;
 	struct wl_listener surface_configure;
 	struct wl_listener surface_ack_configure;
 	struct wl_listener surface_commit;
