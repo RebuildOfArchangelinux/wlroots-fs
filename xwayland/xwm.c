@@ -1826,7 +1826,8 @@ void wlr_xwayland_surface_configure(struct wlr_xwayland_surface *xsurface,
 	uint32_t mask = XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y |
 		XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT |
 		XCB_CONFIG_WINDOW_BORDER_WIDTH;
-	uint32_t values[] = {scale(xwm, x), scale(xwm, y), scale(xwm, width), scale(xwm, height), 0};
+	uint32_t values[] = {scale(xwm, x), scale(xwm, y),
+		round(scale(xwm, width)), round(scale(xwm, height)), 0};
 	xcb_configure_window(xwm->xcb_conn, xsurface->window_id, mask, values);
 
 	// If the window size did not change, then we cannot rely on
@@ -1839,10 +1840,10 @@ void wlr_xwayland_surface_configure(struct wlr_xwayland_surface *xsurface,
 			.response_type = XCB_CONFIGURE_NOTIFY,
 			.event = xsurface->window_id,
 			.window = xsurface->window_id,
-			.x = x,
-			.y = y,
-			.width = width,
-			.height = height,
+			.x = scale(xwm, x),
+			.y = scale(xwm, y),
+			.width = round(scale(xwm, width)),
+			.height = round(scale(xwm, height)),
 		};
 
 		xcb_send_event(xwm->xcb_conn, 0, xsurface->window_id,
