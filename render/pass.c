@@ -2,6 +2,8 @@
 #include <string.h>
 #include <wlr/render/interface.h>
 
+#include <stdio.h>
+
 void wlr_render_pass_init(struct wlr_render_pass *render_pass,
 		const struct wlr_render_pass_impl *impl) {
 	assert(impl->submit && impl->add_texture && impl->add_rect);
@@ -20,6 +22,14 @@ void wlr_render_pass_add_texture(struct wlr_render_pass *render_pass,
 	// texture
 	if (!wlr_fbox_empty(&options->src_box)) {
 		const struct wlr_fbox *box = &options->src_box;
+		if (!(box->x >= 0 && box->y >= 0 &&
+			box->x + box->width <= options->texture->width &&
+			box->y + box->height <= options->texture->height)) {
+			printf("x: %f, y: %f, width: %f, height: %f, texture width: "
+							"%d, texture height: %d\n",
+							box->x, box->y, box->width, box->height,
+							options->texture->width, options->texture->height);
+		}
 		assert(box->x >= 0 && box->y >= 0 &&
 			box->x + box->width <= options->texture->width &&
 			box->y + box->height <= options->texture->height);
@@ -63,7 +73,7 @@ float wlr_render_texture_options_get_alpha(const struct wlr_render_texture_optio
 
 void wlr_render_rect_options_get_box(const struct wlr_render_rect_options *options,
 		const struct wlr_buffer *buffer, struct wlr_fbox *box) {
-	if (wlr_box_empty(&options->box)) {
+	if (wlr_fbox_empty(&options->box)) {
 		*box = (struct wlr_fbox){
 			.width = buffer->width,
 			.height = buffer->height,
@@ -72,7 +82,5 @@ void wlr_render_rect_options_get_box(const struct wlr_render_rect_options *optio
 		return;
 	}
 
-	struct wlr_fbox t;
-	wlr_box_to_fbox(&t, &options->box);
-	*box = t;
+	*box = options->box;
 }

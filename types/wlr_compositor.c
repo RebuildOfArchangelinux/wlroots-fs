@@ -144,10 +144,10 @@ static void surface_handle_set_input_region(struct wl_client *client,
 }
 
 static void surface_state_transformed_buffer_size(struct wlr_surface_state *state,
-		double *width, double *height) {
+		int *width, int *height) {
 	*width = state->buffer_width;
 	*height = state->buffer_height;
-	wlr_output_transform_fcoords(state->transform, width, height);
+	wlr_output_transform_coords(state->transform, width, height);
 }
 
 /**
@@ -157,7 +157,7 @@ static void surface_state_transformed_buffer_size(struct wlr_surface_state *stat
  * destination rectangle).
  */
 static void surface_state_viewport_src_size(struct wlr_surface_state *state,
-		double *out_width, double *out_height) {
+		int *out_width, int *out_height) {
 	if (state->buffer_width == 0 && state->buffer_height == 0) {
 		*out_width = *out_height = 0;
 		return;
@@ -243,7 +243,7 @@ static void surface_update_damage(pixman_region32_t *buffer_damage,
 		pixman_region32_copy(&surface_damage, &pending->surface_damage);
 
 		if (pending->viewport.has_dst) {
-			double src_width, src_height;
+			int src_width, src_height;
 			surface_state_viewport_src_size(pending, &src_width, &src_height);
 			float scale_x = (float)pending->viewport.dst_width / src_width;
 			float scale_y = (float)pending->viewport.dst_height / src_height;
@@ -259,7 +259,7 @@ static void surface_update_damage(pixman_region32_t *buffer_damage,
 
 		wlr_region_scale(&surface_damage, &surface_damage, pending->scale);
 
-		double width, height;
+		int width, height;
 		surface_state_transformed_buffer_size(pending, &width, &height);
 		wlr_region_transform(&surface_damage, &surface_damage,
 			wlr_output_transform_invert(pending->transform),
@@ -1110,7 +1110,7 @@ void wlr_surface_get_effective_damage(struct wlr_surface *surface,
 		crop_region(damage, damage, &src_box);
 	}
 	if (surface->current.viewport.has_dst) {
-		double src_width, src_height;
+		int src_width, src_height;
 		surface_state_viewport_src_size(&surface->current,
 			&src_width, &src_height);
 		float scale_x = (float)surface->current.viewport.dst_width / src_width;
@@ -1133,7 +1133,7 @@ void wlr_surface_get_buffer_source_box(struct wlr_surface *surface,
 		box->width = surface->current.viewport.src.width * surface->current.scale;
 		box->height = surface->current.viewport.src.height * surface->current.scale;
 
-		double width, height;
+		int width, height;
 		surface_state_transformed_buffer_size(&surface->current, &width, &height);
 		wlr_fbox_transform(box, box,
 			wlr_output_transform_invert(surface->current.transform),

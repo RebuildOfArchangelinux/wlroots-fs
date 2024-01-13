@@ -1150,6 +1150,7 @@ static void scene_entry_render(struct render_list_entry *entry, const struct ren
 	transform_output_box(&dst_box, data);
 	transform_output_damage(&render_region, data);
 
+	struct wlr_fbox t;
 	switch (node->type) {
 	case WLR_SCENE_NODE_TREE:
 		assert(false);
@@ -1157,8 +1158,9 @@ static void scene_entry_render(struct render_list_entry *entry, const struct ren
 	case WLR_SCENE_NODE_RECT:;
 		struct wlr_scene_rect *scene_rect = wlr_scene_rect_from_node(node);
 
+		wlr_box_to_fbox(&t, &dst_box);
 		wlr_render_pass_add_rect(data->render_pass, &(struct wlr_render_rect_options){
-			.box = dst_box,
+			.box = t,
 			.color = {
 				.r = scene_rect->color[0],
 				.g = scene_rect->color[1],

@@ -78,7 +78,8 @@ out:
 
 static void render(const struct wlr_fbox *box, const pixman_region32_t *clip, GLint attrib) {
 	pixman_region32_t region;
-	pixman_region32_init_rect(&region, box->x, box->y, box->width, box->height);
+	pixman_region32_init_rect(&region, floor(box->x), floor(box->y),
+	  ceil(box->width), ceil(box->height));
 
 	if (clip) {
 		pixman_region32_intersect(&region, &region, clip);

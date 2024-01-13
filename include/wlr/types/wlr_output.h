@@ -39,7 +39,7 @@ struct wlr_output_cursor {
 	double x, y;
 	bool enabled;
 	bool visible;
-	uint32_t width, height;
+	double width, height;
 	struct wlr_fbox src_box;
 	enum wl_output_transform transform;
 	int32_t hotspot_x, hotspot_y;

@@ -60,7 +60,7 @@ void wlr_output_lock_software_cursors(struct wlr_output *output, bool lock) {
  * Returns the cursor box, scaled for its output.
  */
 static void output_cursor_get_box(struct wlr_output_cursor *cursor,
-		struct wlr_box *box) {
+		struct wlr_fbox *box) {
 	box->x = cursor->x - cursor->hotspot_x;
 	box->y = cursor->y - cursor->hotspot_y;
 	box->width = cursor->width;
@@ -90,7 +90,7 @@ void wlr_output_add_software_cursors_to_render_pass(struct wlr_output *output,
 			continue;
 		}
 
-		struct wlr_box box;
+		struct wlr_fbox box;
 		output_cursor_get_box(cursor, &box);
 
 		pixman_region32_t cursor_damage;
@@ -103,16 +103,13 @@ void wlr_output_add_software_cursors_to_render_pass(struct wlr_output *output,
 
 		enum wl_output_transform transform =
 			wlr_output_transform_invert(output->transform);
-		wlr_box_transform(&box, &box, transform, width, height);
+		wlr_fbox_transform(&box, &box, transform, width, height);
 		wlr_region_transform(&cursor_damage, &cursor_damage, transform, width, height);
-
-		struct wlr_fbox t;
-		wlr_box_to_fbox(&t, &box);
 
 		wlr_render_pass_add_texture(render_pass, &(struct wlr_render_texture_options) {
 			.texture = texture,
 			.src_box = cursor->src_box,
-			.dst_box = t,
+			.dst_box = box,
 			.clip = &cursor_damage,
 			.transform = output->transform,
 		});
@@ -124,7 +121,7 @@ void wlr_output_add_software_cursors_to_render_pass(struct wlr_output *output,
 }
 
 static void output_cursor_damage_whole(struct wlr_output_cursor *cursor) {
-	struct wlr_box box;
+	struct wlr_fbox box;
 	output_cursor_get_box(cursor, &box);
 
 	pixman_region32_t damage;
@@ -150,13 +147,15 @@ static void output_cursor_update_visible(struct wlr_output_cursor *cursor) {
 	output_box.x = output_box.y = 0;
 	wlr_output_transformed_resolution(cursor->output, &output_box.width,
 		&output_box.height);
+	struct wlr_fbox t;
+	wlr_box_to_fbox(&t, &output_box);
 
-	struct wlr_box cursor_box;
+	struct wlr_fbox cursor_box;
 	output_cursor_get_box(cursor, &cursor_box);
 
-	struct wlr_box intersection;
+	struct wlr_fbox intersection;
 	cursor->visible =
-		wlr_box_intersection(&intersection, &output_box, &cursor_box);
+		wlr_fbox_intersection(&intersection, &t, &cursor_box);
 }
 
 static bool output_pick_cursor_format(struct wlr_output *output,

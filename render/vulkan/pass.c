@@ -420,10 +420,10 @@ static void render_pass_mark_box_updated(struct wlr_vk_render_pass *pass,
 	}
 
 	pixman_box32_t pixman_box = {
-		.x1 = box->x,
-		.x2 = box->x + box->width,
-		.y1 = box->y,
-		.y2 = box->y + box->height,
+		.x1 = floor(box->x),
+		.x2 = floor(box->x + box->width),
+		.y1 = ceil(box->y),
+		.y2 = ceil(box->y + box->height),
 	};
 	rect_union_add(&pass->updated_region, pixman_box);
 }
@@ -459,9 +459,7 @@ static void render_pass_add_rect(struct wlr_render_pass *wlr_pass,
 			.height = clip_rects[i].y2 - clip_rects[i].y1,
 		};
 		struct wlr_fbox intersection;
-		struct wlr_fbox t;
-		wlr_box_to_fbox(&t, &options->box);
-		if (!wlr_fbox_intersection(&intersection, &t, &clip_box)) {
+		if (!wlr_fbox_intersection(&intersection, &options->box, &clip_box)) {
 			continue;
 		}
 		render_pass_mark_box_updated(pass, &intersection);

@@ -123,7 +123,7 @@ struct wlr_render_color {
 
 struct wlr_render_rect_options {
 	/* Rectangle coordinates */
-	struct wlr_box box;
+	struct wlr_fbox box;
 	/* Source color */
 	struct wlr_render_color color;
 	/* Clip region, leave NULL to disable clipping */
